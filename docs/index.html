@@ -95,7 +95,7 @@
       <summary>Methodology</summary>
       <p>Each BBGM rating is converted to an NBA percentile using the distribution of all current NBA players, then that percentile is converted to the equivalent NBA 2K rating using 2K's own rating distribution. An exponential curve stretches the top 10% so elite ratings translate to truly elite 2K values.</p>
       <p>BBGM stats fan out to 2K stats: Ins → Close Shot / Driving Layup / Post Control; Dnk → Driving / Standing Dunk; Drb → Ball Handle / Speed With Ball; dIQ → Interior D / Perimeter D / Steal / Block; Reb → both rebounds; Spd → Speed / Agility; Stre → Strength; Jmp → Vertical; Mid, 3Pt, FT and Pss map directly. Height converts to inches (BBGM 0 ≈ 5'6", 50 ≈ 6'6", 100 ≈ 7'6").</p>
-      <p>The converted 2K profile is compared to every build's rating ranges (midpoints) with weighted cosine similarity — physicals and primary scoring weigh more, and any stat at or above the 85th NBA percentile gets a 1.5× "signature skill" boost. Builds whose height range doesn't fit the player (±1") are excluded; the filter relaxes automatically if nothing fits.</p>
+      <p>The converted 2K profile is compared to every build's rating midpoints with weighted cosine similarity — physicals and primary scoring weigh more, and any stat at or above the 85th NBA percentile gets a 1.5× "signature skill" boost. Falling below a build's actual minimum for any stat also applies a shortfall penalty (harsher on signature stats), so a player is never matched to a build whose required skills they don't have. Builds whose height range doesn't fit the player (±1") are excluded; the filter relaxes automatically if nothing fits.</p>
     </details>
   </div>
 </div>
@@ -213,15 +213,25 @@ function matchArchetypes(conv, topN = 3) {
     const out = [];
     for (const a of list) {
       let dot = 0, nu = 0, na = 0;
+      // shortfall penalty: a build needs its whole [lo, hi] range, not just a
+      // midpoint match — falling below a stat's minimum (especially a
+      // signature, heavily-weighted one) should tank the score, not just
+      // nudge it, or players get recommended builds whose skills they lack.
+      let penalty = 1;
       for (let i = 0; i < userVec.length; i++) {
         const u = weights[i] * userVec[i], v = weights[i] * a.stats[i];
         dot += u * v; nu += u * u; na += v * v;
+        const deficit = a.lo[i] - userVec[i];
+        if (deficit > 0) {
+          const sigma = 14 / weights[i];
+          penalty *= Math.exp(-(deficit * deficit) / (2 * sigma * sigma));
+        }
       }
       // fold height into the vector so similar builds at wrong sizes rank lower
       const uh = HEIGHT_W * hIn, vh = HEIGHT_W * (a.hMin + a.hMax) / 2;
       dot += uh * vh; nu += uh * uh; na += vh * vh;
       const cos = dot / Math.sqrt(nu * na);
-      out.push({ a, cos });
+      out.push({ a, cos: cos * penalty });
     }
     out.sort((x, y) => y.cos - x.cos);
     return out;

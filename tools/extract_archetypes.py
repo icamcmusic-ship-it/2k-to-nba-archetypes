@@ -45,17 +45,19 @@ POS_ABBR = {
 
 
 def parse_range(v):
-    """Return midpoint of a '70-85' range, or the number itself."""
+    """Return (min, max) of a '70-85' range, or (n, n) for a bare number."""
     if v is None:
         return None
     if isinstance(v, (int, float)):
-        return float(v)
+        return (float(v), float(v))
     s = str(v).strip()
     m = re.match(r"^(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)$", s)
     if m:
-        return (float(m.group(1)) + float(m.group(2))) / 2
+        lo, hi = float(m.group(1)), float(m.group(2))
+        return (min(lo, hi), max(lo, hi))
     try:
-        return float(s)
+        n = float(s)
+        return (n, n)
     except ValueError:
         return None
 
@@ -82,14 +84,16 @@ def main():
         if not name:
             continue
         hmin, hmax = parse_height(row[2])
-        stats = {}
+        lo_by_stat = {}
+        hi_by_stat = {}
         ok = True
         for stat, col in STAT_COLS.items():
-            val = parse_range(row[col])
-            if val is None:
+            rng = parse_range(row[col])
+            if rng is None:
                 ok = False
                 break
-            stats[stat] = round(val, 2)
+            lo_by_stat[stat] = round(rng[0], 2)
+            hi_by_stat[stat] = round(rng[1], 2)
         if not ok or hmin is None:
             continue
         archetypes.append({
@@ -97,7 +101,11 @@ def main():
             "pos": POS_ABBR.get(row[1], row[1]),
             "hMin": hmin,
             "hMax": hmax,
-            "stats": [stats[s] for s in STAT_COLS],
+            # midpoints, kept for display / backward compatibility
+            "stats": [round((lo_by_stat[s] + hi_by_stat[s]) / 2, 2) for s in STAT_COLS],
+            # per-stat [min, max] range, used to penalize players who fall short
+            "lo": [lo_by_stat[s] for s in STAT_COLS],
+            "hi": [hi_by_stat[s] for s in STAT_COLS],
         })
 
     out = {
