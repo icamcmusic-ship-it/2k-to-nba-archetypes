@@ -95,7 +95,7 @@
       <summary>Methodology</summary>
       <p>Each BBGM rating is converted to an NBA percentile using the distribution of all current NBA players, then that percentile is converted to the equivalent NBA 2K rating using 2K's own rating distribution. An exponential curve stretches the top 10% so elite ratings translate to truly elite 2K values.</p>
       <p>BBGM stats fan out to 2K stats: Ins → Close Shot / Driving Layup / Post Control; Dnk → Driving / Standing Dunk; Drb → Ball Handle / Speed With Ball; dIQ → Interior D / Perimeter D / Steal / Block; Reb → both rebounds; Spd → Speed / Agility; Stre → Strength; Jmp → Vertical; Mid, 3Pt, FT and Pss map directly. Height converts to inches (BBGM 0 ≈ 5'6", 50 ≈ 6'6", 100 ≈ 7'6").</p>
-      <p>The converted 2K profile is compared to every build's rating ranges (midpoints) with an asymmetric weighted fit score: every point a build demands <em>above</em> what the player has counts as a full-weight skill deficit, while exceeding a build's needs costs only a third as much. Physicals and primary scoring weigh more, and any stat at or above the 85th NBA percentile gets a 1.5× "signature skill" boost so builds that don't feature the player's elite skills rank lower. Builds whose height range doesn't fit the player (±1") are excluded — the filter relaxes automatically if nothing fits — and any remaining height mismatch is penalized per inch. Each match card lists the build's biggest remaining skill gaps so you can see where the player falls short.</p>
+      <p>The converted 2K profile is compared to every build's rating ranges (midpoints) with an asymmetric weighted fit score: every point a build demands <em>above</em> what the player has counts as a skill deficit that scales quadratically (one glaring hole sinks a build rather than averaging away), while exceeding a build's needs costs only a third as much. Any build demanding a skill 22+ points beyond the player is disqualified outright (relaxed only if too few builds survive). Physicals and primary scoring weigh more, and any stat at/above the 85th or at/below the 15th NBA percentile gets a 1.5× boost — builds must feature the player's elite skills and avoid demanding the ones he clearly lacks. Builds whose height range doesn't fit the player (±1") are excluded — the filter relaxes automatically if nothing fits — and any remaining height mismatch is penalized per inch. Each match card lists the build's biggest remaining skill gaps so you can see where the player falls short.</p>
     </details>
   </div>
 </div>
@@ -205,9 +205,12 @@ function convertPlayer(bbgm) {
 // what the player has (a skill deficit) is penalized at full weight, while
 // having MORE than the build needs is only lightly penalized (wasted talent).
 const DEFICIT_GRACE = 3;    // ignore tiny shortfalls within build-range noise
+const DEFICIT_CURVE = 15;   // quadratic ramp: a 30-pt gap hurts far more than 2x a 15-pt gap
 const SURPLUS_SCALE = 1 / 3; // exceeding a build's needs hurts 3x less than lacking them
 const HEIGHT_W = 2.5;       // penalty points per inch outside the build's height range
 const GAP_MIN = 8;          // deficit size worth flagging to the user
+const HARD_GAP = 22;        // any single deficit this large disqualifies the build outright
+const HARD_GAP_RELAXED = 32; // fallback threshold if too few builds survive
 
 function fmtHeight(hMin, hMax) {
   const f = h => `${Math.floor(h/12)}'${h%12}"`;
@@ -215,12 +218,13 @@ function fmtHeight(hMin, hMax) {
 }
 
 function matchArchetypes(conv, topN = 3) {
-  // signature-skill boost: source stat at/above 85th percentile → 1.5x weight,
-  // so builds that don't feature the player's elite skills rank lower
+  // signature boost: a stat at/above the 85th percentile OR at/below the 15th
+  // gets 1.5x weight — builds must feature the player's elite skills AND avoid
+  // demanding the skills he clearly lacks
   const stats = ARCHETYPE_DATA.statNames;
   const weights = stats.map(s => {
     const [src, w] = K2_FROM_BBGM[s];
-    return conv.pctl[src] >= 85 ? w * 1.5 : w;
+    return conv.pctl[src] >= 85 || conv.pctl[src] <= 15 ? w * 1.5 : w;
   });
   const totalW = weights.reduce((a, b) => a + b, 0);
   const userVec = stats.map(s => conv.k2[s]);
@@ -229,12 +233,15 @@ function matchArchetypes(conv, topN = 3) {
   function score(list) {
     const out = [];
     for (const a of list) {
-      let pen = 0;
+      let pen = 0, maxGap = 0;
       const gaps = [];
       for (let i = 0; i < userVec.length; i++) {
         const diff = a.stats[i] - userVec[i]; // >0: build demands more than the player has
         if (diff > DEFICIT_GRACE) {
-          pen += weights[i] * (diff - DEFICIT_GRACE);
+          const d = diff - DEFICIT_GRACE;
+          // quadratic ramp: one glaring hole should sink a build, not average away
+          pen += weights[i] * d * (1 + d / DEFICIT_CURVE);
+          if (diff > maxGap) maxGap = diff;
           if (diff >= GAP_MIN) gaps.push({ stat: stats[i], short: diff });
         } else if (diff < 0) {
           pen += weights[i] * -diff * SURPLUS_SCALE;
@@ -243,7 +250,7 @@ function matchArchetypes(conv, topN = 3) {
       pen /= totalW;
       pen += HEIGHT_W * (hIn < a.hMin ? a.hMin - hIn : hIn > a.hMax ? hIn - a.hMax : 0);
       gaps.sort((x, y) => y.short - x.short);
-      out.push({ a, pen, gaps: gaps.slice(0, 3) });
+      out.push({ a, pen, maxGap, gaps: gaps.slice(0, 3) });
     }
     out.sort((x, y) => x.pen - y.pen);
     return out;
@@ -253,7 +260,14 @@ function matchArchetypes(conv, topN = 3) {
   if (pool.length < topN) pool = ARCHETYPE_DATA.archetypes.filter(a => hIn >= a.hMin - 2 && hIn <= a.hMax + 2);
   if (pool.length < topN) pool = ARCHETYPE_DATA.archetypes;
 
-  return score(pool).slice(0, topN).map(({ a, pen, gaps }) => ({
+  // hard disqualifier: a build demanding a skill the player is nowhere near
+  // (e.g. a 3PT build for a non-shooter) is out, no matter how well the rest fits
+  const scored = score(pool);
+  let final = scored.filter(x => x.maxGap <= HARD_GAP);
+  if (final.length < topN) final = scored.filter(x => x.maxGap <= HARD_GAP_RELAXED);
+  if (final.length < topN) final = scored;
+
+  return final.slice(0, topN).map(({ a, pen, gaps }) => ({
     name: a.name, pos: a.pos,
     height: fmtHeight(a.hMin, a.hMax),
     score: Math.max(0, Math.min(100, Math.round((100 - pen * 4) * 10) / 10)),
