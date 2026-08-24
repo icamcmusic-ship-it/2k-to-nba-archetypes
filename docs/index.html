@@ -54,6 +54,18 @@
   summary { cursor: pointer; color: var(--accent); font-weight: 600; }
   .err { color: var(--bad); font-weight: 600; margin-top: .5rem; }
   input[type=file] { color: var(--muted); margin-top: .25rem; }
+  select { padding: .4rem .5rem; border: 1px solid var(--border); border-radius: 6px;
+           background: var(--bg); color: var(--text); font: inherit; }
+  .row { display: flex; align-items: flex-end; gap: 1rem; flex-wrap: wrap; }
+  .dropzone { border: 2px dashed var(--border); border-radius: 8px; padding: .85rem; margin-top: .5rem; }
+  .dropzone.drag { border-color: var(--accent); background: var(--row-alt); }
+  .progress { height: 8px; background: var(--row-alt); border-radius: 4px; overflow: hidden; margin-top: .75rem; }
+  .progress-bar { height: 100%; width: 0%; background: var(--accent); transition: width .15s; }
+  th.sortable { cursor: pointer; user-select: none; }
+  th.sortable:hover { color: var(--text); }
+  th.sortable .arrow { opacity: .6; }
+  .pager { display: flex; align-items: center; gap: .6rem; margin-top: .6rem; }
+  .pager button { margin: 0; padding: .3rem .7rem; }
 </style>
 </head>
 <body>
@@ -62,25 +74,55 @@
   <div class="sub">Translate Basketball GM ratings (1–100, 50 ≈ NBA average) into their closest NBA 2K build archetypes.
     Ratings are mapped through NBA player percentiles, then matched against 1,256 2K builds by skill fit — builds demanding skills the player doesn't have are penalized — with a height filter.</div>
 
-  <div class="card">
+  <div class="card" id="singleCard">
     <h2>Single player</h2>
     <label for="pasteRow">Quick paste — a whole ratings row (Hgt → Reb, tab / comma / space separated)</label>
     <textarea id="pasteRow" rows="1" placeholder="e.g. 47  55  60  59  49  47  56  55  56  51  52  51  56  52  55"></textarea>
+    <div id="pasteHint" class="hint"></div>
     <div class="hint">Or type each rating below:</div>
     <div class="grid" id="inputs" style="margin-top:.6rem"></div>
+    <div class="row" style="margin-top:.75rem">
+      <div>
+        <label for="topN">Results per player</label>
+        <select id="topN">
+          <option value="3" selected>Top 3</option>
+          <option value="5">Top 5</option>
+          <option value="10">Top 10</option>
+          <option value="0">All eligible</option>
+        </select>
+      </div>
+    </div>
     <button id="btnCalc">Find archetype</button>
     <button id="btnClear" class="secondary">Clear</button>
+    <button id="btnSample" class="secondary">Load a sample player</button>
+    <button id="btnCopyLink" class="secondary" style="display:none">Copy shareable link</button>
     <div id="singleErr" class="err" style="display:none"></div>
-    <div id="singleOut"></div>
+    <div id="singleOut" aria-live="polite"></div>
   </div>
 
   <div class="card">
     <h2>Batch: upload a ratings CSV</h2>
     <div class="hint">Use a BBGM player-ratings export. Recognized headers: Name, Pos, Hgt, Str/Stre, Spd, Jmp, End/Endu, Ins, Dnk, FT, 2Pt/Mid, 3Pt/TP, oIQ, dIQ, Drb, Pss, Reb (case-insensitive, extra columns ignored).</div>
-    <input type="file" id="csvFile" accept=".csv,text/csv">
+    <div id="dropzone" class="dropzone">
+      <input type="file" id="csvFile" accept=".csv,text/csv">
+      <div class="hint">...or drag &amp; drop a CSV file anywhere in this box</div>
+    </div>
+    <details style="margin-top:.5rem">
+      <summary>Paste CSV text instead of uploading a file</summary>
+      <textarea id="csvPaste" rows="4" placeholder="Paste CSV contents here, including the header row"></textarea>
+      <button id="btnParsePaste" class="secondary">Parse pasted CSV</button>
+    </details>
+    <button id="btnSampleRoster" class="secondary">Load sample roster</button>
     <button id="btnDownload" class="secondary" style="display:none">Download results CSV</button>
+    <div id="batchProgress" class="progress" style="display:none"><div id="batchProgressBar" class="progress-bar"></div></div>
+    <div id="batchProgressText" class="hint"></div>
     <div id="batchErr" class="err" style="display:none"></div>
-    <div class="scroll" id="batchOut"></div>
+    <div id="batchSearchWrap" style="display:none; margin-top:.75rem; max-width:320px">
+      <label for="batchSearch">Filter</label>
+      <input type="text" id="batchSearch" placeholder="Filter by name or position">
+    </div>
+    <div class="scroll" id="batchOut" aria-live="polite"></div>
+    <div id="batchPager" class="pager" style="display:none"></div>
   </div>
 
   <div class="card">
@@ -93,9 +135,9 @@
   <div class="card">
     <details>
       <summary>Methodology</summary>
-      <p>Each BBGM rating is converted to an NBA percentile using the distribution of all current NBA players, then that percentile is converted to the equivalent NBA 2K rating using 2K's own rating distribution. An exponential curve stretches the top 10% so elite ratings translate to truly elite 2K values.</p>
-      <p>BBGM stats fan out to 2K stats: Ins → Close Shot / Driving Layup / Post Control; Dnk → Driving / Standing Dunk; Drb → Ball Handle / Speed With Ball; dIQ → Interior D / Perimeter D / Steal / Block; Reb → both rebounds; Spd → Speed / Agility; Stre → Strength; Jmp → Vertical; Mid, 3Pt, FT and Pss map directly. Height converts to inches (BBGM 0 ≈ 5'6", 50 ≈ 6'6", 100 ≈ 7'6").</p>
-      <p>The converted 2K profile is compared to every build's rating ranges (midpoints) with an asymmetric weighted fit score: every point a build demands <em>above</em> what the player has counts as a skill deficit that scales quadratically (one glaring hole sinks a build rather than averaging away), while exceeding a build's needs costs only a third as much. Any build demanding a skill 22+ points beyond the player is disqualified outright (relaxed only if too few builds survive). Physicals and primary scoring weigh more, and any stat at/above the 85th or at/below the 15th NBA percentile gets a 1.5× boost — builds must feature the player's elite skills and avoid demanding the ones he clearly lacks. Builds whose height range doesn't fit the player (±1") are excluded — the filter relaxes automatically if nothing fits — and any remaining height mismatch is penalized per inch. Each match card lists the build's biggest remaining skill gaps so you can see where the player falls short.</p>
+      <p>Each BBGM rating is converted to an NBA percentile using the distribution of all current NBA players, then that percentile is converted to the equivalent NBA 2K rating using 2K's own rating distribution. An exponential curve stretches both the top and bottom 10% so elite (and truly poor) ratings translate to truly elite (or poor) 2K values instead of bunching up near the middle.</p>
+      <p>BBGM stats fan out to 2K stats: Ins → Close Shot / Driving Layup / Post Control; Dnk → Driving / Standing Dunk; Drb → Ball Handle / Speed With Ball; dIQ → Interior D / Perimeter D / Steal / Block; Reb → both rebounds; Spd → Speed / Agility; Stre → Strength; Jmp → Vertical; Mid, 3Pt and FT map directly, blended with a share of OIQ for Midrange, Ball Handle, and Pass Accuracy (offensive IQ loosely covers shot selection, handles, and court vision in 2K terms). Endu isn't modeled by any 2K attribute — it's shown as a separate conditioning note instead of being silently ignored. Height converts to inches (BBGM 0 ≈ 5'6", 50 ≈ 6'6", 100 ≈ 7'6").</p>
+      <p>The converted 2K profile is compared to every build's actual rating <em>range</em> (not a midpoint) with an asymmetric weighted fit score: a player sitting inside a build's range costs nothing; every point a build's <em>minimum</em> exceeds what the player has counts as a skill deficit that scales quadratically (one glaring hole sinks a build rather than averaging away), while exceeding a build's <em>maximum</em> costs only a third as much. Any build demanding a skill 22+ points beyond the player is disqualified outright (relaxed only if too few builds survive). Physicals and primary scoring weigh more, and any stat at/above the 85th or at/below the 15th NBA percentile gets a 1.5× boost — builds must feature the player's elite skills and avoid demanding the ones he clearly lacks. Builds whose height range doesn't fit the player (±1") are excluded — the filter relaxes automatically if nothing fits, and height itself is clamped to the archetype database's supported range (roughly 5'9"–7'4") before matching, with a note shown when that clamp kicks in. Any remaining height mismatch within the pool is penalized per inch. The displayed "% fit" is the match's percentile rank against every other build reachable for this player — not an absolute quality score — so it stays informative even for below-average or maxed-out inputs. Each match card lists the build's biggest remaining skill gaps so you can see where the player falls short.</p>
     </details>
   </div>
 </div>
@@ -123,18 +165,18 @@ const K2_ANCHORS = {
   "Close Shot":[64.35,71,75,80,84,89,92,95.65],
   "Driving Layup":[50.36,60,70,75,81,88,90,94.64],
   "Driving Dunk":[30,65,74,83,89,93,94,96.51],
-  "Standing Dunk":[25,39,51,72,85,90,90,95],
+  "Standing Dunk":[25,39,51,72,85,90,92,95],
   "Post Control":[30,43.3,50,60,79,87,88,93],
   "Midrange Shot":[38,70,74,80,86,90,92,95.52],
-  "Threepoint Shot":[25,70.2,80,82,85,90,90,95.38],
+  "Threepoint Shot":[25,70.2,80,82,85,90,92,95.38],
   "Free Throw":[39,56,61,70,78,85,91,98.85],
   "Pass Accuracy":[25,60,70,76,85,87,91,95],
-  "Ball Handle":[38.9,48,60,75,81,86,86,92.55],
+  "Ball Handle":[38.9,48,60,75,81,86,88,92.55],
   "Speed With Ball":[25,41,55,68,75,80,84.9,88.58],
   "Interior Defense":[34.08,60,70,80,84,88,90,92.92],
   "Perimeter Defense":[35,42.7,61,74,82,87,92,94],
   "Steal":[33,40,48,60,75,85,89,94],
-  "Block":[30,50,74,80,86.25,93,93,95],
+  "Block":[30,50,74,80,86.25,93,94.5,95],
   "Offensive Rebound":[25,39,59,74,84,92,94,97],
   "Defensive Rebound":[39.16,55,70,81,90,94,95,97],
   "Speed":[50,65,71,80,84,87,90,93],
@@ -143,15 +185,23 @@ const K2_ANCHORS = {
   "Vertical":[55.43,70,75,80,83,86,88,90.57],
 };
 
-// 2K stat -> [BBGM source stat, matching weight]
+// 2K stat -> [[BBGM source stat, blend share], ...], matching weight.
+// Most 2K stats come from a single BBGM stat; a few (playmaking/shooting
+// touch-stats) also draw a share from OIQ, since offensive IQ in BBGM maps
+// loosely onto shot selection, court vision, and handles rather than any one
+// 2K attribute. Shares for a stat must sum to 1.
 const K2_FROM_BBGM = {
-  "Close Shot":["Ins",1], "Driving Layup":["Ins",1], "Post Control":["Ins",1],
-  "Driving Dunk":["Dnk",1.25], "Standing Dunk":["Dnk",1],
-  "Midrange Shot":["Mid",1.25], "Threepoint Shot":["TP",1.5], "Free Throw":["FT",0.75],
-  "Pass Accuracy":["Pss",1], "Ball Handle":["Drb",1.1], "Speed With Ball":["Drb",1],
-  "Interior Defense":["DIQ",1], "Perimeter Defense":["DIQ",1], "Steal":["DIQ",0.9], "Block":["DIQ",0.9],
-  "Offensive Rebound":["Reb",1], "Defensive Rebound":["Reb",1],
-  "Speed":["Spd",1.5], "Agility":["Spd",1], "Strength":["Stre",1.5], "Vertical":["Jmp",1.25],
+  "Close Shot":[[["Ins",1]],1], "Driving Layup":[[["Ins",1]],1], "Post Control":[[["Ins",1]],1],
+  "Driving Dunk":[[["Dnk",1]],1.25], "Standing Dunk":[[["Dnk",1]],1],
+  "Midrange Shot":[[["Mid",0.85],["OIQ",0.15]],1.25],
+  "Threepoint Shot":[[["TP",1]],1.5], "Free Throw":[[["FT",1]],0.75],
+  "Pass Accuracy":[[["Pss",0.7],["OIQ",0.3]],1],
+  "Ball Handle":[[["Drb",0.8],["OIQ",0.2]],1.1], "Speed With Ball":[[["Drb",1]],1],
+  "Interior Defense":[[["DIQ",1]],1], "Perimeter Defense":[[["DIQ",1]],1],
+  "Steal":[[["DIQ",1]],0.9], "Block":[[["DIQ",1]],0.9],
+  "Offensive Rebound":[[["Reb",1]],1], "Defensive Rebound":[[["Reb",1]],1],
+  "Speed":[[["Spd",1]],1.5], "Agility":[[["Spd",1]],1],
+  "Strength":[[["Stre",1]],1.5], "Vertical":[[["Jmp",1]],1.25],
 };
 
 const BBGM_STATS = Object.keys(BBGM_ANCHORS);
@@ -180,8 +230,8 @@ function bbgmToPercentile(stat, val) {
   const spread = anchors[7] - anchors[0];
   if (val > anchors[7]) p = Math.min(99.9, 99 + (val - anchors[7]) * (10 / spread));
   else if (val < anchors[0]) p = Math.max(0.1, 1 - (anchors[0] - val) * (10 / spread));
-  if (p > 90) p = 90 + 9 * Math.pow((p - 90) / 9, 0.75);       // widen great-vs-elite gap
-  else if (p < 10) p = 10 - 9 * Math.pow((10 - p) / 9, 0.75);  // widen bad-vs-terrible gap
+  if (p > 90) p = 90 + 9 * Math.pow((p - 90) / 9, 1.5);        // widen great-vs-elite gap
+  else if (p < 10) p = 10 - 9 * Math.pow((10 - p) / 9, 1.5);   // widen bad-vs-terrible gap
   return p;
 }
 
@@ -192,10 +242,16 @@ function percentileTo2K(stat2k, p) {
 function bbgmHeightToInches(hgt) { return 66 + hgt * 0.24; } // 0→5'6", 50→6'6", 100→7'6"
 
 function convertPlayer(bbgm) {
-  const pctl = {}, k2 = {};
+  const pctl = {}, k2 = {}, blendPctl = {};
   for (const s of BBGM_STATS) pctl[s] = bbgmToPercentile(s, bbgm[s]);
-  for (const [stat2k, [src]] of Object.entries(K2_FROM_BBGM)) k2[stat2k] = percentileTo2K(stat2k, pctl[src]);
-  return { pctl, k2, heightIn: bbgmHeightToInches(bbgm.Hgt) };
+  for (const [stat2k, [srcs]] of Object.entries(K2_FROM_BBGM)) {
+    const p = srcs.reduce((sum, [src, share]) => sum + share * pctl[src], 0);
+    blendPctl[stat2k] = p;
+    k2[stat2k] = percentileTo2K(stat2k, p);
+  }
+  // Endu isn't modeled by any 2K attribute — surfaced separately as a
+  // conditioning note rather than silently dropped.
+  return { pctl, k2, blendPctl, heightIn: bbgmHeightToInches(bbgm.Hgt), enduPctl: pctl.Endu };
 }
 
 // ---------- Matching ----------
@@ -212,10 +268,14 @@ const GAP_MIN = 8;          // deficit size worth flagging to the user
 const HARD_GAP = 22;        // any single deficit this large disqualifies the build outright
 const HARD_GAP_RELAXED = 32; // fallback threshold if too few builds survive
 
-function fmtHeight(hMin, hMax) {
-  const f = h => `${Math.floor(h/12)}'${h%12}"`;
-  return f(hMin) + (hMax !== hMin ? `–${f(hMax)}` : "");
-}
+function fmtH(h) { return `${Math.floor(h/12)}'${Math.round(h%12)}"`; }
+function fmtHeight(hMin, hMax) { return fmtH(hMin) + (hMax !== hMin ? `–${fmtH(hMax)}` : ""); }
+
+// The archetype DB doesn't cover every height BBGM can produce (69"-88" here).
+// Match against the nearest supported height instead of silently falling
+// back to the whole DB (which would discard the height constraint entirely).
+const DB_H_MIN = Math.min(...ARCHETYPE_DATA.archetypes.map(a => a.hMin));
+const DB_H_MAX = Math.max(...ARCHETYPE_DATA.archetypes.map(a => a.hMax));
 
 function matchArchetypes(conv, topN = 3) {
   // signature boost: a stat at/above the 85th percentile OR at/below the 15th
@@ -223,12 +283,15 @@ function matchArchetypes(conv, topN = 3) {
   // demanding the skills he clearly lacks
   const stats = ARCHETYPE_DATA.statNames;
   const weights = stats.map(s => {
-    const [src, w] = K2_FROM_BBGM[s];
-    return conv.pctl[src] >= 85 || conv.pctl[src] <= 15 ? w * 1.5 : w;
+    const [, w] = K2_FROM_BBGM[s];
+    const p = conv.blendPctl[s];
+    return p >= 85 || p <= 15 ? w * 1.5 : w;
   });
   const totalW = weights.reduce((a, b) => a + b, 0);
   const userVec = stats.map(s => conv.k2[s]);
-  const hIn = conv.heightIn;
+  const hInRaw = conv.heightIn;
+  const hIn = Math.max(DB_H_MIN, Math.min(DB_H_MAX, hInRaw));
+  const heightClamped = hIn !== hInRaw;
 
   function score(list) {
     const out = [];
@@ -236,15 +299,20 @@ function matchArchetypes(conv, topN = 3) {
       let pen = 0, maxGap = 0;
       const gaps = [];
       for (let i = 0; i < userVec.length; i++) {
-        const diff = a.stats[i] - userVec[i]; // >0: build demands more than the player has
-        if (diff > DEFICIT_GRACE) {
-          const d = diff - DEFICIT_GRACE;
+        // a.stats[i] is [min, max] of the build's legal range for this stat —
+        // deficit/surplus are measured against the band, not a midpoint, so a
+        // player sitting inside the range isn't penalized at all
+        const [lo, hi] = a.stats[i];
+        const deficit = lo - userVec[i]; // >0: build's minimum exceeds what the player has
+        const surplus = userVec[i] - hi; // >0: player exceeds the build's maximum
+        if (deficit > DEFICIT_GRACE) {
+          const d = deficit - DEFICIT_GRACE;
           // quadratic ramp: one glaring hole should sink a build, not average away
           pen += weights[i] * d * (1 + d / DEFICIT_CURVE);
-          if (diff > maxGap) maxGap = diff;
-          if (diff >= GAP_MIN) gaps.push({ stat: stats[i], short: diff });
-        } else if (diff < 0) {
-          pen += weights[i] * -diff * SURPLUS_SCALE;
+          if (deficit > maxGap) maxGap = deficit;
+          if (deficit >= GAP_MIN) gaps.push({ stat: stats[i], short: deficit });
+        } else if (surplus > 0) {
+          pen += weights[i] * surplus * SURPLUS_SCALE;
         }
       }
       pen /= totalW;
@@ -256,26 +324,52 @@ function matchArchetypes(conv, topN = 3) {
     return out;
   }
 
+  // topN can be Infinity ("all eligible") — relaxation should still target a
+  // small, fixed sample size, not "enough for infinity" (which would always
+  // fall through to the full unfiltered DB).
+  const minWanted = Number.isFinite(topN) ? topN : 5;
+
   let pool = ARCHETYPE_DATA.archetypes.filter(a => hIn >= a.hMin - 1 && hIn <= a.hMax + 1);
-  if (pool.length < topN) pool = ARCHETYPE_DATA.archetypes.filter(a => hIn >= a.hMin - 2 && hIn <= a.hMax + 2);
-  if (pool.length < topN) pool = ARCHETYPE_DATA.archetypes;
+  if (pool.length < minWanted) pool = ARCHETYPE_DATA.archetypes.filter(a => hIn >= a.hMin - 2 && hIn <= a.hMax + 2);
+  if (pool.length < minWanted) pool = ARCHETYPE_DATA.archetypes;
 
   // hard disqualifier: a build demanding a skill the player is nowhere near
   // (e.g. a 3PT build for a non-shooter) is out, no matter how well the rest fits
   const scored = score(pool);
   let final = scored.filter(x => x.maxGap <= HARD_GAP);
-  if (final.length < topN) final = scored.filter(x => x.maxGap <= HARD_GAP_RELAXED);
-  if (final.length < topN) final = scored;
+  if (final.length < minWanted) final = scored.filter(x => x.maxGap <= HARD_GAP_RELAXED);
+  if (final.length < minWanted) final = scored;
 
-  return final.slice(0, topN).map(({ a, pen, gaps }) => ({
-    name: a.name, pos: a.pos,
-    height: fmtHeight(a.hMin, a.hMax),
-    score: Math.max(0, Math.min(100, Math.round((100 - pen * 4) * 10) / 10)),
-    gaps: gaps.map(g => `${g.stat} −${Math.round(g.short)}`),
-  }));
+  // Score is a percentile-of-fit against every other build in this player's
+  // own pool, not an absolute 0-100 "quality" scale. 2K builds are uniformly
+  // elite-rated, so a fixed pen*4 scale saturates near 0% for most real
+  // rosters and can't tell "closest fit" from "how good is this player" —
+  // percentile rank stays informative and monotonic across the whole range.
+  const pens = scored.map(x => x.pen).sort((a, b) => a - b);
+  const pctOf = pen => {
+    if (pens.length <= 1) return 100;
+    // count of builds with strictly lower (better) pen than this one
+    let lo = 0, hi = pens.length;
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (pens[mid] < pen) lo = mid + 1; else hi = mid; }
+    return Math.round((100 * (1 - lo / pens.length)) * 10) / 10;
+  };
+
+  return {
+    heightClamped, heightUsedIn: hIn,
+    // bestPen is the #1 match's raw (unnormalized) penalty — comparable
+    // across different players, unlike the percentile score, which by
+    // construction always puts a player's own best-fitting build near 100%
+    // regardless of how good that best fit actually is.
+    bestPen: scored.length ? Math.round(scored[0].pen * 10) / 10 : 0,
+    matches: final.slice(0, topN).map(({ a, pen, gaps }) => ({
+      name: a.name, pos: a.pos,
+      height: fmtHeight(a.hMin, a.hMax),
+      score: pctOf(pen),
+      gapPts: Math.round(pen * 10) / 10,
+      gaps: gaps.map(g => `${g.stat} −${Math.round(g.short)}`),
+    })),
+  };
 }
-
-function analyze(bbgm) { return matchArchetypes(convertPlayer(bbgm)); }
 
 // ---------- 2K Badges ----------
 // thresholds: [Bronze, Silver, Gold, HoF, Legend] — null means that tier is unreachable via this attribute
@@ -376,8 +470,15 @@ function attrTier(value, t) {
   return 0;
 }
 
+// No 2K badge is defined above 7'4" or below 5'9" — clamp into that band
+// before evaluating badges, rather than letting a maxed-height player (BBGM
+// Hgt near 100 → 7'6"+) fall outside every badge's real height range and be
+// marked N/A across the board.
+const BADGE_H_MIN = Math.min(...BADGES.map(b => b.h[0]));
+const BADGE_H_MAX = Math.max(...BADGES.map(b => b.h[1]));
+
 function calcBadges(conv) {
-  const hIn = conv.heightIn;
+  const hIn = Math.max(BADGE_H_MIN, Math.min(BADGE_H_MAX, conv.heightIn));
   return BADGES.map(b => {
     const eligible = hIn >= b.h[0] - 1 && hIn <= b.h[1] + 1;
     // any:true → alternative requirements (best attribute counts, e.g. Deadeye
@@ -405,15 +506,81 @@ for (const s of BBGM_STATS) {
   inputsDiv.appendChild(d);
 }
 
-document.getElementById("pasteRow").addEventListener("input", e => {
-  const nums = e.target.value.trim().split(/[\s,;\t]+/).map(Number).filter(n => !isNaN(n));
-  if (nums.length === BBGM_STATS.length) {
-    BBGM_STATS.forEach((s, i) => document.getElementById("in_" + s).value = nums[i]);
+// ---------- Persistence: localStorage + shareable URL state ----------
+// URL params use lowercased BBGM stat names (hgt, stre, spd, ...) plus `top`
+// for the results-per-player setting, so a link like ?hgt=47&stre=55&...
+// reproduces the exact same calculation for anyone it's shared with.
+const LS_PLAYER_KEY = "bbgm2k:lastPlayer";
+const LS_TOPN_KEY = "bbgm2k:topN";
+const topNSel = document.getElementById("topN");
+
+function getTopN() {
+  const v = parseInt(topNSel.value, 10);
+  return v === 0 ? Infinity : v;
+}
+
+function bbgmToParams(bbgm) {
+  const p = new URLSearchParams();
+  for (const s of BBGM_STATS) p.set(s.toLowerCase(), bbgm[s]);
+  if (topNSel.value !== "3") p.set("top", topNSel.value);
+  return p;
+}
+
+function bbgmFromParams(params) {
+  const bbgm = {};
+  for (const s of BBGM_STATS) {
+    const v = parseFloat(params.get(s.toLowerCase()));
+    if (isNaN(v) || v < 0 || v > 100) return null;
+    bbgm[s] = v;
   }
+  return bbgm;
+}
+
+function fillInputs(bbgm) {
+  BBGM_STATS.forEach(s => { document.getElementById("in_" + s).value = bbgm[s]; });
+}
+
+(function initFromUrlOrStorage() {
+  const params = new URLSearchParams(location.search);
+  if (params.has("top") && ["3","5","10","0"].includes(params.get("top"))) topNSel.value = params.get("top");
+  else { const savedTop = localStorage.getItem(LS_TOPN_KEY); if (savedTop) topNSel.value = savedTop; }
+
+  const fromUrl = bbgmFromParams(params);
+  if (fromUrl) {
+    fillInputs(fromUrl);
+    // A link is shared to show a result, not just prefill the form.
+    setTimeout(() => document.getElementById("btnCalc").click(), 0);
+    return;
+  }
+  try {
+    const saved = JSON.parse(localStorage.getItem(LS_PLAYER_KEY) || "null");
+    if (saved && BBGM_STATS.every(s => typeof saved[s] === "number")) fillInputs(saved);
+  } catch { /* ignore malformed storage */ }
+})();
+
+topNSel.addEventListener("change", () => localStorage.setItem(LS_TOPN_KEY, topNSel.value));
+
+document.getElementById("pasteRow").addEventListener("input", e => {
+  const need = BBGM_STATS.length;
+  const hint = document.getElementById("pasteHint");
+  const nums = e.target.value.trim().split(/[\s,;\t]+/).map(Number).filter(n => !isNaN(n));
+  if (nums.length === 0) { hint.textContent = ""; return; }
+  if (nums.length < need) {
+    hint.textContent = `Found ${nums.length} number${nums.length === 1 ? "" : "s"}, need at least ${need} (Hgt → Reb).`;
+    return;
+  }
+  // A raw BBGM ratings-table row carries extra leading columns (Ovr, Pot,
+  // Age, Contract, ...) before the trailing Hgt → Reb block — take the last
+  // `need` numbers rather than requiring an exact count.
+  const trimmed = nums.slice(nums.length - need);
+  BBGM_STATS.forEach((s, i) => document.getElementById("in_" + s).value = trimmed[i]);
+  hint.textContent = nums.length > need
+    ? `Found ${nums.length} numbers — using the last ${need} (Hgt → Reb).`
+    : "";
 });
 
 // Enter anywhere in the single-player form runs the calculation
-document.querySelector(".card").addEventListener("keydown", e => {
+document.getElementById("singleCard").addEventListener("keydown", e => {
   if (e.key === "Enter" && e.target.tagName !== "BUTTON") {
     e.preventDefault();
     document.getElementById("btnCalc").click();
@@ -421,7 +588,8 @@ document.querySelector(".card").addEventListener("keydown", e => {
 });
 
 function scoreClass(s) { return s >= 80 ? "s-good" : s >= 60 ? "s-ok" : "s-bad"; }
-function esc(s) { return String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+function scoreLabel(s) { return s >= 80 ? "Strong fit" : s >= 60 ? "Moderate fit" : s >= 20 ? "Loose fit" : "Weak fit"; }
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 
 document.getElementById("btnCalc").addEventListener("click", () => {
   const err = document.getElementById("singleErr"), out = document.getElementById("singleOut");
@@ -433,10 +601,25 @@ document.getElementById("btnCalc").addEventListener("click", () => {
     if (v < 0 || v > 100) { err.textContent = `${s} must be between 0 and 100.`; err.style.display = "block"; return; }
     bbgm[s] = v;
   }
+  localStorage.setItem(LS_PLAYER_KEY, JSON.stringify(bbgm));
+  const params = bbgmToParams(bbgm);
+  history.replaceState(null, "", location.pathname + "?" + params.toString());
+  document.getElementById("btnCopyLink").style.display = "inline-block";
   const conv = convertPlayer(bbgm);
-  const matches = matchArchetypes(conv);
+  const result = matchArchetypes(conv, getTopN());
+  const matches = result.matches;
   const hIn = Math.round(conv.heightIn);
-  let html = `<div class="hint" style="margin-top:.75rem">Converted height: ~${Math.floor(hIn/12)}'${hIn%12}"</div><div class="match">`;
+  let html = `<div class="hint" style="margin-top:.75rem">Converted height: ~${Math.floor(hIn/12)}'${hIn%12}"</div>`;
+  if (result.heightClamped) {
+    const dir = conv.heightIn > DB_H_MAX ? "above" : "below";
+    html += `<div class="hint">Height clamped to ${fmtH(result.heightUsedIn)} for archetype matching — no 2K build exists ${dir} this.</div>`;
+  }
+  html += `<div class="hint">Conditioning: ${Math.round(conv.enduPctl)}th percentile endurance (not modeled by any 2K attribute directly — sustains effort/minutes on court).</div>`;
+  html += `<div class="hint">Best-fit gap: ${result.bestPen.toFixed(1)} penalty points (lower = closer to a real build; 0 means the player sits fully inside the #1 match's ranges). The %-fit below ranks builds against each other for <em>this player</em>, so it isn't comparable across different players — this number is.</div>`;
+  if (result.bestPen >= 15) {
+    html += `<div class="hint">No 2K build is really built this low — the closest shape is shown below, but expect large skill gaps.</div>`;
+  }
+  html += `<div class="match">`;
   matches.forEach((m, i) => {
     const gaps = m.gaps.length
       ? `<div class="hint">Skill gaps: ${esc(m.gaps.join(", "))}</div>`
@@ -444,7 +627,7 @@ document.getElementById("btnCalc").addEventListener("click", () => {
     html += `<div class="match-card"><div class="rank">#${i+1} match</div>
       <div class="name">${esc(m.name)}</div>
       <div class="meta">${esc(m.pos)} · ${esc(m.height)}</div>
-      <div class="score ${scoreClass(m.score)}">${m.score}% fit</div>${gaps}</div>`;
+      <div class="score ${scoreClass(m.score)}">${m.score}% fit — ${scoreLabel(m.score)}</div>${gaps}</div>`;
   });
   html += `</div><details style="margin-top:.75rem"><summary>Converted 2K ratings</summary><div class="scroll"><table><thead><tr>` +
     ARCHETYPE_DATA.statNames.map(s => `<th>${esc(s)}</th>`).join("") + `</tr></thead><tbody><tr>` +
@@ -463,11 +646,31 @@ document.getElementById("btnCalc").addEventListener("click", () => {
   out.innerHTML = html;
 });
 
+document.getElementById("btnSample").addEventListener("click", () => {
+  // A real row from PlayerRatings_sample.csv (Hgt -> Reb block).
+  document.getElementById("pasteRow").value = "34 74 98 82 79 75 55 94 100 100 76 79 95 94 58";
+  document.getElementById("pasteRow").dispatchEvent(new Event("input"));
+});
+
+document.getElementById("btnCopyLink").addEventListener("click", async e => {
+  const btn = e.target;
+  try {
+    await navigator.clipboard.writeText(location.href);
+    const old = btn.textContent;
+    btn.textContent = "Copied!";
+    setTimeout(() => { btn.textContent = old; }, 1500);
+  } catch {
+    window.prompt("Copy this link:", location.href);
+  }
+});
+
 document.getElementById("btnClear").addEventListener("click", () => {
   BBGM_STATS.forEach(s => document.getElementById("in_" + s).value = "");
   document.getElementById("pasteRow").value = "";
   document.getElementById("singleOut").innerHTML = "";
   document.getElementById("singleErr").style.display = "none";
+  document.getElementById("btnCopyLink").style.display = "none";
+  history.replaceState(null, "", location.pathname);
 });
 
 // ---------- CSV batch UI ----------
@@ -500,16 +703,113 @@ function parseCSV(text) {
   return rows;
 }
 
-let batchResults = null;
+let batchResults = null;   // full unfiltered/unsorted results for the last run
+let batchSkipped = 0;
+let batchSort = { key: null, dir: 1 };
+let batchPage = 0;
+const BATCH_PAGE_SIZE = 50;
+const BATCH_CHUNK = 150;   // rows processed per tick before yielding to the UI thread
 
-document.getElementById("csvFile").addEventListener("change", async e => {
-  const errEl = document.getElementById("batchErr"), out = document.getElementById("batchOut");
-  errEl.style.display = "none"; out.innerHTML = "";
+function showBatchErr(msg) {
+  const errEl = document.getElementById("batchErr");
+  errEl.textContent = msg;
+  errEl.style.display = "block";
+}
+
+function getFilteredSortedBatch() {
+  const q = document.getElementById("batchSearch").value.trim().toLowerCase();
+  let list = batchResults || [];
+  if (q) list = list.filter(p => p.name.toLowerCase().includes(q) || p.pos.toLowerCase().includes(q));
+  if (batchSort.key) {
+    const { key, dir } = batchSort;
+    list = list.slice().sort((a, b) => {
+      let av, bv;
+      if (key === "name") { av = a.name.toLowerCase(); bv = b.name.toLowerCase(); }
+      else if (key === "pos") { av = a.pos.toLowerCase(); bv = b.pos.toLowerCase(); }
+      else if (key === "bestPen") { av = a.bestPen; bv = b.bestPen; }
+      else { av = a.matches[0] ? a.matches[0].score : -1; bv = b.matches[0] ? b.matches[0].score : -1; }
+      return av < bv ? -dir : av > bv ? dir : 0;
+    });
+  }
+  return list;
+}
+
+function renderBatchTable() {
+  const out = document.getElementById("batchOut");
+  const filtered = getFilteredSortedBatch();
+  const totalPages = Math.max(1, Math.ceil(filtered.length / BATCH_PAGE_SIZE));
+  if (batchPage >= totalPages) batchPage = totalPages - 1;
+  const pageItems = filtered.slice(batchPage * BATCH_PAGE_SIZE, (batchPage + 1) * BATCH_PAGE_SIZE);
+  const topN = batchResults.length ? Math.max(...batchResults.map(p => p.matches.length)) : 0;
+  const arrow = key => batchSort.key === key ? (batchSort.dir === 1 ? "▲" : "▼") : "";
+
+  let html = `<div class="hint" style="margin-top:.75rem">${batchResults.length} player${batchResults.length === 1 ? "" : "s"} converted${batchSkipped ? `, ${batchSkipped} row${batchSkipped === 1 ? "" : "s"} skipped (missing/invalid ratings)` : ""}${filtered.length !== batchResults.length ? ` — ${filtered.length} shown after filter` : ""}.</div>`;
+  html += `<div class="hint">"Fit gap" is the #1 match's raw penalty (lower = closer to a real build) and is comparable across players; "%" ranks builds against each other for that one player only. Click a column header to sort.</div>`;
+  html += `<table style="margin-top:.5rem"><thead><tr>` +
+    `<th class="sortable" data-key="name">Player <span class="arrow">${arrow("name")}</span></th>` +
+    `<th class="sortable" data-key="pos">Pos <span class="arrow">${arrow("pos")}</span></th>` +
+    `<th class="sortable" data-key="bestPen">Fit gap <span class="arrow">${arrow("bestPen")}</span></th>`;
+  for (let i = 0; i < topN; i++) {
+    html += `<th>${i === 0 ? "Best archetype" : `#${i + 1}`}</th>`;
+    html += i === 0
+      ? `<th class="sortable" data-key="score">% <span class="arrow">${arrow("score")}</span></th>`
+      : `<th>%</th>`;
+  }
+  html += `</tr></thead><tbody>`;
+  for (const p of pageItems) {
+    html += `<tr><td>${esc(p.name)}</td><td>${esc(p.pos)}</td><td>${p.bestPen.toFixed(1)}</td>`;
+    for (let i = 0; i < topN; i++) {
+      const m = p.matches[i];
+      html += m
+        ? `<td>${esc(m.name)} <span class="hint">(${esc(m.pos)})</span></td><td class="score ${scoreClass(m.score)}" title="${scoreLabel(m.score)}">${m.score}</td>`
+        : `<td></td><td></td>`;
+    }
+    html += `</tr>`;
+  }
+  html += "</tbody></table>";
+  out.innerHTML = html;
+
+  out.querySelectorAll("th.sortable").forEach(th => {
+    th.addEventListener("click", () => {
+      const key = th.dataset.key;
+      if (batchSort.key === key) batchSort.dir *= -1; else { batchSort = { key, dir: 1 }; }
+      batchPage = 0;
+      renderBatchTable();
+    });
+  });
+
+  const pager = document.getElementById("batchPager");
+  if (totalPages > 1) {
+    pager.style.display = "flex";
+    pager.innerHTML = `<button class="secondary" id="pagerPrev" ${batchPage === 0 ? "disabled" : ""}>Prev</button>` +
+      `<span class="hint">Page ${batchPage + 1} of ${totalPages} (${filtered.length} players)</span>` +
+      `<button class="secondary" id="pagerNext" ${batchPage >= totalPages - 1 ? "disabled" : ""}>Next</button>`;
+    document.getElementById("pagerPrev").addEventListener("click", () => { batchPage--; renderBatchTable(); });
+    document.getElementById("pagerNext").addEventListener("click", () => { batchPage++; renderBatchTable(); });
+  } else {
+    pager.style.display = "none";
+  }
+}
+
+document.getElementById("batchSearch").addEventListener("input", () => { batchPage = 0; renderBatchTable(); });
+
+// Processes CSV text in chunks with a yield back to the UI thread between
+// each one, so a large roster (hundreds+ of players x 1,256 builds) shows
+// progress and keeps the page responsive instead of freezing it.
+async function runBatch(text) {
+  document.getElementById("batchErr").style.display = "none";
+  document.getElementById("batchOut").innerHTML = "";
+  document.getElementById("batchSearchWrap").style.display = "none";
+  document.getElementById("batchPager").style.display = "none";
   document.getElementById("btnDownload").style.display = "none";
-  const file = e.target.files[0];
-  if (!file) return;
-  const rows = parseCSV(await file.text());
-  if (rows.length < 2) { errEl.textContent = "CSV appears to be empty."; errEl.style.display = "block"; return; }
+  const progress = document.getElementById("batchProgress");
+  const progressBar = document.getElementById("batchProgressBar");
+  const progressText = document.getElementById("batchProgressText");
+  progress.style.display = "none";
+  progressText.textContent = "";
+
+  const rows = parseCSV(text);
+  if (rows.length < 2) { showBatchErr("CSV appears to be empty."); return; }
 
   const header = rows[0].map(h => h.trim());
   const colFor = {};   // BBGM stat -> column index
@@ -521,53 +821,120 @@ document.getElementById("csvFile").addEventListener("change", async e => {
     else if (HEADER_ALIASES[k] && colFor[HEADER_ALIASES[k]] === undefined) colFor[HEADER_ALIASES[k]] = i;
   });
   const missing = BBGM_STATS.filter(s => colFor[s] === undefined);
-  if (missing.length) { errEl.textContent = "Missing columns: " + missing.join(", "); errEl.style.display = "block"; return; }
+  if (missing.length) { showBatchErr("Missing columns: " + missing.join(", ")); return; }
 
-  batchResults = [];
+  const total = rows.length - 1;
+  if (total > BATCH_CHUNK) progress.style.display = "block";
+
+  const results = [];
   let skipped = 0;
+  const topN = getTopN();
   for (let r = 1; r < rows.length; r++) {
     const bbgm = {};
     let bad = false;
     for (const s of BBGM_STATS) {
       const v = parseFloat(rows[r][colFor[s]]);
-      if (isNaN(v)) { bad = true; break; }
+      // Same 0-100 range check the single-player form enforces — an
+      // out-of-range value (e.g. a malformed export) is skipped rather than
+      // silently producing a garbage row.
+      if (isNaN(v) || v < 0 || v > 100) { bad = true; break; }
       bbgm[s] = v;
     }
     if (bad) { skipped++; continue; }
-    const m = analyze(bbgm);
-    batchResults.push({
-      name: nameCol >= 0 ? rows[r][nameCol] : `Row ${r}`,
-      pos: posCol >= 0 ? rows[r][posCol] : "",
-      matches: m,
+    const r2 = matchArchetypes(convertPlayer(bbgm), topN);
+    const rawName = nameCol >= 0 ? rows[r][nameCol] : undefined;
+    results.push({
+      name: rawName ? rawName : `Row ${r}`,
+      pos: posCol >= 0 && rows[r][posCol] ? rows[r][posCol] : "",
+      matches: r2.matches,
+      bestPen: r2.bestPen,
     });
+    if (r % BATCH_CHUNK === 0) {
+      progressBar.style.width = Math.round((r / total) * 100) + "%";
+      progressText.textContent = `Processing ${r.toLocaleString()} / ${total.toLocaleString()}...`;
+      await new Promise(res => setTimeout(res, 0));
+    }
   }
-  if (!batchResults.length) { errEl.textContent = "No valid rating rows found."; errEl.style.display = "block"; return; }
+  progress.style.display = "none";
+  progressText.textContent = "";
 
-  let html = `<div class="hint" style="margin-top:.75rem">${batchResults.length} player${batchResults.length === 1 ? "" : "s"} converted${skipped ? `, ${skipped} row${skipped === 1 ? "" : "s"} skipped (missing/invalid ratings)` : ""}.</div>`;
-  html += `<table style="margin-top:.5rem"><thead><tr><th>Player</th><th>Pos</th>
-    <th>Best archetype</th><th>%</th><th>2nd</th><th>%</th><th>3rd</th><th>%</th></tr></thead><tbody>`;
-  for (const p of batchResults) {
-    html += `<tr><td>${esc(p.name)}</td><td>${esc(p.pos)}</td>`;
-    for (const m of p.matches) html += `<td>${esc(m.name)} <span class="hint">(${esc(m.pos)})</span></td><td class="score ${scoreClass(m.score)}">${m.score}</td>`;
-    html += `</tr>`;
-  }
-  html += "</tbody></table>";
-  out.innerHTML = html;
+  if (!results.length) { showBatchErr("No valid rating rows found."); return; }
+
+  batchResults = results;
+  batchSkipped = skipped;
+  batchSort = { key: null, dir: 1 };
+  batchPage = 0;
+  document.getElementById("batchSearch").value = "";
+  document.getElementById("batchSearchWrap").style.display = results.length > 10 ? "block" : "none";
+  renderBatchTable();
   document.getElementById("btnDownload").style.display = "inline-block";
+}
+
+document.getElementById("csvFile").addEventListener("change", async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  await runBatch(await file.text());
+  // Reset so re-selecting the same file (e.g. after fixing it and re-exporting
+  // under the same name) fires 'change' again instead of going silent.
+  e.target.value = "";
+});
+
+const dropzone = document.getElementById("dropzone");
+["dragenter", "dragover"].forEach(evt => dropzone.addEventListener(evt, e => {
+  e.preventDefault(); dropzone.classList.add("drag");
+}));
+["dragleave", "drop"].forEach(evt => dropzone.addEventListener(evt, e => {
+  e.preventDefault(); dropzone.classList.remove("drag");
+}));
+dropzone.addEventListener("drop", async e => {
+  const file = e.dataTransfer.files && e.dataTransfer.files[0];
+  if (!file) return;
+  await runBatch(await file.text());
+});
+
+document.getElementById("btnParsePaste").addEventListener("click", async () => {
+  const text = document.getElementById("csvPaste").value;
+  if (!text.trim()) { showBatchErr("Paste some CSV text first."); return; }
+  await runBatch(text);
+});
+
+document.getElementById("btnSampleRoster").addEventListener("click", async () => {
+  try {
+    // Served from docs/ itself (not ../data/) so it's reachable when GitHub
+    // Pages publishes only the docs/ folder, per this repo's own setup steps.
+    const res = await fetch("PlayerRatings_sample.csv");
+    if (!res.ok) throw new Error(String(res.status));
+    await runBatch(await res.text());
+  } catch {
+    showBatchErr("Couldn't load the sample roster (docs/PlayerRatings_sample.csv). " +
+      "If you opened this page directly from disk (a file:// URL), your browser may " +
+      "block loading sibling files — try GitHub Pages or a local server instead.");
+  }
 });
 
 document.getElementById("btnDownload").addEventListener("click", () => {
-  if (!batchResults) return;
+  if (!batchResults || !batchResults.length) return;
   const q = s => `"${String(s).replace(/"/g, '""')}"`;
-  let csv = "Name,Pos,Archetype1,Pos1,Score1,Archetype2,Pos2,Score2,Archetype3,Pos3,Score3\n";
+  const maxN = Math.max(...batchResults.map(p => p.matches.length));
+  let header = "Name,Pos,FitGap";
+  for (let i = 0; i < maxN; i++) header += `,Archetype${i + 1},Pos${i + 1},Score${i + 1}`;
+  let csv = header + "\n";
   for (const p of batchResults) {
-    csv += [q(p.name), q(p.pos), ...p.matches.flatMap(m => [q(m.name), q(m.pos), m.score])].join(",") + "\n";
+    const cells = [q(p.name), q(p.pos), p.bestPen];
+    for (let i = 0; i < maxN; i++) {
+      const m = p.matches[i];
+      cells.push(m ? q(m.name) : "", m ? q(m.pos) : "", m ? m.score : "");
+    }
+    csv += cells.join(",") + "\n";
   }
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([csv], {type: "text/csv"}));
+  const url = URL.createObjectURL(new Blob([csv], {type: "text/csv"}));
+  a.href = url;
   a.download = "archetypes.csv";
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(a.href);
+  // Revoking synchronously races the download start in Firefox/Safari.
+  setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 0);
 });
 </script>
 </body>
