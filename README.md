@@ -6,8 +6,8 @@ Convert [Basketball GM](https://basketball-gm.com/) player ratings into their cl
 
 Open **`docs/index.html`** in any browser (no server needed), or enable GitHub Pages on the `docs/` folder to host it.
 
-- **Single player**: type the 15 BBGM ratings (Hgt → Reb), or paste a whole ratings row into the quick-paste box. You get the top 3 archetype matches with position, height range, and match %, the player's converted 2K ratings, and their full 2K badge sheet (Bronze/Silver/Gold/HoF/Legend for all 39 badges, gated by height eligibility).
-- **Batch**: upload a BBGM ratings CSV (like a Player Ratings export — see `data/PlayerRatings_sample.csv`). Recognized headers: `Name, Pos, Hgt, Str, Spd, Jmp, End, Ins, Dnk, FT, 2Pt, 3Pt, oIQ, dIQ, Drb, Pss, Reb` (aliases like `Stre`/`Endu`/`Mid`/`TP` also work; extra columns are ignored). Results show top 3 matches per player and can be downloaded as CSV.
+- **Single player**: type the 15 BBGM ratings (Hgt → Reb), paste a whole ratings row into the quick-paste box (a raw BBGM export row with extra leading columns works too — it uses the trailing 15), or click "Load a sample player". Pick how many results to see (3/5/10/all eligible) with the results-per-player selector. You get the archetype matches with position, height range, and match %, a raw "fit gap" that's comparable across different players, the player's converted 2K ratings, and their full 2K badge sheet (Bronze/Silver/Gold/HoF/Legend for all 39 badges, gated by height eligibility). Calculating updates the page URL with the player's ratings, so you can copy/share the link (via "Copy shareable link") to reproduce the exact same result; your last-entered player and results-per-player setting are also remembered locally between visits.
+- **Batch**: upload a BBGM ratings CSV, drag-and-drop one onto the drop zone, paste CSV text directly, or click "Load sample roster" (like a Player Ratings export — see `data/PlayerRatings_sample.csv`, also duplicated at `docs/PlayerRatings_sample.csv` so it's reachable from a GitHub Pages deploy of just `docs/`). Recognized headers: `Name, Pos, Hgt, Str, Spd, Jmp, End, Ins, Dnk, FT, 2Pt, 3Pt, oIQ, dIQ, Drb, Pss, Reb` (aliases like `Stre`/`Endu`/`Mid`/`TP` also work; extra columns are ignored). Large rosters are processed in chunks with a progress bar so the page doesn't lock up. Results can be searched/filtered, sorted by clicking a column header, paged through, and downloaded as CSV.
 
 ## How it works
 
@@ -25,5 +25,6 @@ Open **`docs/index.html`** in any browser (no server needed), or enable GitHub P
 
 - `docs/index.html` — the whole app (self-contained, no dependencies)
 - `docs/archetypes.js` — generated archetype database
+- `docs/PlayerRatings_sample.csv` — copy of the sample roster, served from `docs/` so the in-app "Load sample roster" button works under a GitHub Pages deploy of just that folder
 - `tools/extract_archetypes.py` — regenerates `archetypes.js` from the source workbook (`pip install openpyxl`, then `python3 tools/extract_archetypes.py data/2K_to_BBGM_Archetypes.xlsx`)
-- `data/` — source workbook (archetype thresholds + percentile tables, credit: FryBandit) and a sample BBGM ratings CSV
+- `data/` — source workbook (archetype thresholds + percentile tables, credit: FryBandit) and the source copy of the sample BBGM ratings CSV

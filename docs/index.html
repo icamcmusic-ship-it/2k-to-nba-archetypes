@@ -54,6 +54,18 @@
   summary { cursor: pointer; color: var(--accent); font-weight: 600; }
   .err { color: var(--bad); font-weight: 600; margin-top: .5rem; }
   input[type=file] { color: var(--muted); margin-top: .25rem; }
+  select { padding: .4rem .5rem; border: 1px solid var(--border); border-radius: 6px;
+           background: var(--bg); color: var(--text); font: inherit; }
+  .row { display: flex; align-items: flex-end; gap: 1rem; flex-wrap: wrap; }
+  .dropzone { border: 2px dashed var(--border); border-radius: 8px; padding: .85rem; margin-top: .5rem; }
+  .dropzone.drag { border-color: var(--accent); background: var(--row-alt); }
+  .progress { height: 8px; background: var(--row-alt); border-radius: 4px; overflow: hidden; margin-top: .75rem; }
+  .progress-bar { height: 100%; width: 0%; background: var(--accent); transition: width .15s; }
+  th.sortable { cursor: pointer; user-select: none; }
+  th.sortable:hover { color: var(--text); }
+  th.sortable .arrow { opacity: .6; }
+  .pager { display: flex; align-items: center; gap: .6rem; margin-top: .6rem; }
+  .pager button { margin: 0; padding: .3rem .7rem; }
 </style>
 </head>
 <body>
@@ -69,9 +81,21 @@
     <div id="pasteHint" class="hint"></div>
     <div class="hint">Or type each rating below:</div>
     <div class="grid" id="inputs" style="margin-top:.6rem"></div>
+    <div class="row" style="margin-top:.75rem">
+      <div>
+        <label for="topN">Results per player</label>
+        <select id="topN">
+          <option value="3" selected>Top 3</option>
+          <option value="5">Top 5</option>
+          <option value="10">Top 10</option>
+          <option value="0">All eligible</option>
+        </select>
+      </div>
+    </div>
     <button id="btnCalc">Find archetype</button>
     <button id="btnClear" class="secondary">Clear</button>
     <button id="btnSample" class="secondary">Load a sample player</button>
+    <button id="btnCopyLink" class="secondary" style="display:none">Copy shareable link</button>
     <div id="singleErr" class="err" style="display:none"></div>
     <div id="singleOut" aria-live="polite"></div>
   </div>
@@ -79,10 +103,26 @@
   <div class="card">
     <h2>Batch: upload a ratings CSV</h2>
     <div class="hint">Use a BBGM player-ratings export. Recognized headers: Name, Pos, Hgt, Str/Stre, Spd, Jmp, End/Endu, Ins, Dnk, FT, 2Pt/Mid, 3Pt/TP, oIQ, dIQ, Drb, Pss, Reb (case-insensitive, extra columns ignored).</div>
-    <input type="file" id="csvFile" accept=".csv,text/csv">
+    <div id="dropzone" class="dropzone">
+      <input type="file" id="csvFile" accept=".csv,text/csv">
+      <div class="hint">...or drag &amp; drop a CSV file anywhere in this box</div>
+    </div>
+    <details style="margin-top:.5rem">
+      <summary>Paste CSV text instead of uploading a file</summary>
+      <textarea id="csvPaste" rows="4" placeholder="Paste CSV contents here, including the header row"></textarea>
+      <button id="btnParsePaste" class="secondary">Parse pasted CSV</button>
+    </details>
+    <button id="btnSampleRoster" class="secondary">Load sample roster</button>
     <button id="btnDownload" class="secondary" style="display:none">Download results CSV</button>
+    <div id="batchProgress" class="progress" style="display:none"><div id="batchProgressBar" class="progress-bar"></div></div>
+    <div id="batchProgressText" class="hint"></div>
     <div id="batchErr" class="err" style="display:none"></div>
+    <div id="batchSearchWrap" style="display:none; margin-top:.75rem; max-width:320px">
+      <label for="batchSearch">Filter</label>
+      <input type="text" id="batchSearch" placeholder="Filter by name or position">
+    </div>
     <div class="scroll" id="batchOut" aria-live="polite"></div>
+    <div id="batchPager" class="pager" style="display:none"></div>
   </div>
 
   <div class="card">
@@ -284,16 +324,21 @@ function matchArchetypes(conv, topN = 3) {
     return out;
   }
 
+  // topN can be Infinity ("all eligible") — relaxation should still target a
+  // small, fixed sample size, not "enough for infinity" (which would always
+  // fall through to the full unfiltered DB).
+  const minWanted = Number.isFinite(topN) ? topN : 5;
+
   let pool = ARCHETYPE_DATA.archetypes.filter(a => hIn >= a.hMin - 1 && hIn <= a.hMax + 1);
-  if (pool.length < topN) pool = ARCHETYPE_DATA.archetypes.filter(a => hIn >= a.hMin - 2 && hIn <= a.hMax + 2);
-  if (pool.length < topN) pool = ARCHETYPE_DATA.archetypes;
+  if (pool.length < minWanted) pool = ARCHETYPE_DATA.archetypes.filter(a => hIn >= a.hMin - 2 && hIn <= a.hMax + 2);
+  if (pool.length < minWanted) pool = ARCHETYPE_DATA.archetypes;
 
   // hard disqualifier: a build demanding a skill the player is nowhere near
   // (e.g. a 3PT build for a non-shooter) is out, no matter how well the rest fits
   const scored = score(pool);
   let final = scored.filter(x => x.maxGap <= HARD_GAP);
-  if (final.length < topN) final = scored.filter(x => x.maxGap <= HARD_GAP_RELAXED);
-  if (final.length < topN) final = scored;
+  if (final.length < minWanted) final = scored.filter(x => x.maxGap <= HARD_GAP_RELAXED);
+  if (final.length < minWanted) final = scored;
 
   // Score is a percentile-of-fit against every other build in this player's
   // own pool, not an absolute 0-100 "quality" scale. 2K builds are uniformly
@@ -461,6 +506,60 @@ for (const s of BBGM_STATS) {
   inputsDiv.appendChild(d);
 }
 
+// ---------- Persistence: localStorage + shareable URL state ----------
+// URL params use lowercased BBGM stat names (hgt, stre, spd, ...) plus `top`
+// for the results-per-player setting, so a link like ?hgt=47&stre=55&...
+// reproduces the exact same calculation for anyone it's shared with.
+const LS_PLAYER_KEY = "bbgm2k:lastPlayer";
+const LS_TOPN_KEY = "bbgm2k:topN";
+const topNSel = document.getElementById("topN");
+
+function getTopN() {
+  const v = parseInt(topNSel.value, 10);
+  return v === 0 ? Infinity : v;
+}
+
+function bbgmToParams(bbgm) {
+  const p = new URLSearchParams();
+  for (const s of BBGM_STATS) p.set(s.toLowerCase(), bbgm[s]);
+  if (topNSel.value !== "3") p.set("top", topNSel.value);
+  return p;
+}
+
+function bbgmFromParams(params) {
+  const bbgm = {};
+  for (const s of BBGM_STATS) {
+    const v = parseFloat(params.get(s.toLowerCase()));
+    if (isNaN(v) || v < 0 || v > 100) return null;
+    bbgm[s] = v;
+  }
+  return bbgm;
+}
+
+function fillInputs(bbgm) {
+  BBGM_STATS.forEach(s => { document.getElementById("in_" + s).value = bbgm[s]; });
+}
+
+(function initFromUrlOrStorage() {
+  const params = new URLSearchParams(location.search);
+  if (params.has("top") && ["3","5","10","0"].includes(params.get("top"))) topNSel.value = params.get("top");
+  else { const savedTop = localStorage.getItem(LS_TOPN_KEY); if (savedTop) topNSel.value = savedTop; }
+
+  const fromUrl = bbgmFromParams(params);
+  if (fromUrl) {
+    fillInputs(fromUrl);
+    // A link is shared to show a result, not just prefill the form.
+    setTimeout(() => document.getElementById("btnCalc").click(), 0);
+    return;
+  }
+  try {
+    const saved = JSON.parse(localStorage.getItem(LS_PLAYER_KEY) || "null");
+    if (saved && BBGM_STATS.every(s => typeof saved[s] === "number")) fillInputs(saved);
+  } catch { /* ignore malformed storage */ }
+})();
+
+topNSel.addEventListener("change", () => localStorage.setItem(LS_TOPN_KEY, topNSel.value));
+
 document.getElementById("pasteRow").addEventListener("input", e => {
   const need = BBGM_STATS.length;
   const hint = document.getElementById("pasteHint");
@@ -502,8 +601,12 @@ document.getElementById("btnCalc").addEventListener("click", () => {
     if (v < 0 || v > 100) { err.textContent = `${s} must be between 0 and 100.`; err.style.display = "block"; return; }
     bbgm[s] = v;
   }
+  localStorage.setItem(LS_PLAYER_KEY, JSON.stringify(bbgm));
+  const params = bbgmToParams(bbgm);
+  history.replaceState(null, "", location.pathname + "?" + params.toString());
+  document.getElementById("btnCopyLink").style.display = "inline-block";
   const conv = convertPlayer(bbgm);
-  const result = matchArchetypes(conv);
+  const result = matchArchetypes(conv, getTopN());
   const matches = result.matches;
   const hIn = Math.round(conv.heightIn);
   let html = `<div class="hint" style="margin-top:.75rem">Converted height: ~${Math.floor(hIn/12)}'${hIn%12}"</div>`;
@@ -544,9 +647,21 @@ document.getElementById("btnCalc").addEventListener("click", () => {
 });
 
 document.getElementById("btnSample").addEventListener("click", () => {
-  // A real row from data/PlayerRatings_sample.csv (Hgt -> Reb block).
+  // A real row from PlayerRatings_sample.csv (Hgt -> Reb block).
   document.getElementById("pasteRow").value = "34 74 98 82 79 75 55 94 100 100 76 79 95 94 58";
   document.getElementById("pasteRow").dispatchEvent(new Event("input"));
+});
+
+document.getElementById("btnCopyLink").addEventListener("click", async e => {
+  const btn = e.target;
+  try {
+    await navigator.clipboard.writeText(location.href);
+    const old = btn.textContent;
+    btn.textContent = "Copied!";
+    setTimeout(() => { btn.textContent = old; }, 1500);
+  } catch {
+    window.prompt("Copy this link:", location.href);
+  }
 });
 
 document.getElementById("btnClear").addEventListener("click", () => {
@@ -554,6 +669,8 @@ document.getElementById("btnClear").addEventListener("click", () => {
   document.getElementById("pasteRow").value = "";
   document.getElementById("singleOut").innerHTML = "";
   document.getElementById("singleErr").style.display = "none";
+  document.getElementById("btnCopyLink").style.display = "none";
+  history.replaceState(null, "", location.pathname);
 });
 
 // ---------- CSV batch UI ----------
@@ -586,16 +703,113 @@ function parseCSV(text) {
   return rows;
 }
 
-let batchResults = null;
+let batchResults = null;   // full unfiltered/unsorted results for the last run
+let batchSkipped = 0;
+let batchSort = { key: null, dir: 1 };
+let batchPage = 0;
+const BATCH_PAGE_SIZE = 50;
+const BATCH_CHUNK = 150;   // rows processed per tick before yielding to the UI thread
 
-document.getElementById("csvFile").addEventListener("change", async e => {
-  const errEl = document.getElementById("batchErr"), out = document.getElementById("batchOut");
-  errEl.style.display = "none"; out.innerHTML = "";
+function showBatchErr(msg) {
+  const errEl = document.getElementById("batchErr");
+  errEl.textContent = msg;
+  errEl.style.display = "block";
+}
+
+function getFilteredSortedBatch() {
+  const q = document.getElementById("batchSearch").value.trim().toLowerCase();
+  let list = batchResults || [];
+  if (q) list = list.filter(p => p.name.toLowerCase().includes(q) || p.pos.toLowerCase().includes(q));
+  if (batchSort.key) {
+    const { key, dir } = batchSort;
+    list = list.slice().sort((a, b) => {
+      let av, bv;
+      if (key === "name") { av = a.name.toLowerCase(); bv = b.name.toLowerCase(); }
+      else if (key === "pos") { av = a.pos.toLowerCase(); bv = b.pos.toLowerCase(); }
+      else if (key === "bestPen") { av = a.bestPen; bv = b.bestPen; }
+      else { av = a.matches[0] ? a.matches[0].score : -1; bv = b.matches[0] ? b.matches[0].score : -1; }
+      return av < bv ? -dir : av > bv ? dir : 0;
+    });
+  }
+  return list;
+}
+
+function renderBatchTable() {
+  const out = document.getElementById("batchOut");
+  const filtered = getFilteredSortedBatch();
+  const totalPages = Math.max(1, Math.ceil(filtered.length / BATCH_PAGE_SIZE));
+  if (batchPage >= totalPages) batchPage = totalPages - 1;
+  const pageItems = filtered.slice(batchPage * BATCH_PAGE_SIZE, (batchPage + 1) * BATCH_PAGE_SIZE);
+  const topN = batchResults.length ? Math.max(...batchResults.map(p => p.matches.length)) : 0;
+  const arrow = key => batchSort.key === key ? (batchSort.dir === 1 ? "▲" : "▼") : "";
+
+  let html = `<div class="hint" style="margin-top:.75rem">${batchResults.length} player${batchResults.length === 1 ? "" : "s"} converted${batchSkipped ? `, ${batchSkipped} row${batchSkipped === 1 ? "" : "s"} skipped (missing/invalid ratings)` : ""}${filtered.length !== batchResults.length ? ` — ${filtered.length} shown after filter` : ""}.</div>`;
+  html += `<div class="hint">"Fit gap" is the #1 match's raw penalty (lower = closer to a real build) and is comparable across players; "%" ranks builds against each other for that one player only. Click a column header to sort.</div>`;
+  html += `<table style="margin-top:.5rem"><thead><tr>` +
+    `<th class="sortable" data-key="name">Player <span class="arrow">${arrow("name")}</span></th>` +
+    `<th class="sortable" data-key="pos">Pos <span class="arrow">${arrow("pos")}</span></th>` +
+    `<th class="sortable" data-key="bestPen">Fit gap <span class="arrow">${arrow("bestPen")}</span></th>`;
+  for (let i = 0; i < topN; i++) {
+    html += `<th>${i === 0 ? "Best archetype" : `#${i + 1}`}</th>`;
+    html += i === 0
+      ? `<th class="sortable" data-key="score">% <span class="arrow">${arrow("score")}</span></th>`
+      : `<th>%</th>`;
+  }
+  html += `</tr></thead><tbody>`;
+  for (const p of pageItems) {
+    html += `<tr><td>${esc(p.name)}</td><td>${esc(p.pos)}</td><td>${p.bestPen.toFixed(1)}</td>`;
+    for (let i = 0; i < topN; i++) {
+      const m = p.matches[i];
+      html += m
+        ? `<td>${esc(m.name)} <span class="hint">(${esc(m.pos)})</span></td><td class="score ${scoreClass(m.score)}" title="${scoreLabel(m.score)}">${m.score}</td>`
+        : `<td></td><td></td>`;
+    }
+    html += `</tr>`;
+  }
+  html += "</tbody></table>";
+  out.innerHTML = html;
+
+  out.querySelectorAll("th.sortable").forEach(th => {
+    th.addEventListener("click", () => {
+      const key = th.dataset.key;
+      if (batchSort.key === key) batchSort.dir *= -1; else { batchSort = { key, dir: 1 }; }
+      batchPage = 0;
+      renderBatchTable();
+    });
+  });
+
+  const pager = document.getElementById("batchPager");
+  if (totalPages > 1) {
+    pager.style.display = "flex";
+    pager.innerHTML = `<button class="secondary" id="pagerPrev" ${batchPage === 0 ? "disabled" : ""}>Prev</button>` +
+      `<span class="hint">Page ${batchPage + 1} of ${totalPages} (${filtered.length} players)</span>` +
+      `<button class="secondary" id="pagerNext" ${batchPage >= totalPages - 1 ? "disabled" : ""}>Next</button>`;
+    document.getElementById("pagerPrev").addEventListener("click", () => { batchPage--; renderBatchTable(); });
+    document.getElementById("pagerNext").addEventListener("click", () => { batchPage++; renderBatchTable(); });
+  } else {
+    pager.style.display = "none";
+  }
+}
+
+document.getElementById("batchSearch").addEventListener("input", () => { batchPage = 0; renderBatchTable(); });
+
+// Processes CSV text in chunks with a yield back to the UI thread between
+// each one, so a large roster (hundreds+ of players x 1,256 builds) shows
+// progress and keeps the page responsive instead of freezing it.
+async function runBatch(text) {
+  document.getElementById("batchErr").style.display = "none";
+  document.getElementById("batchOut").innerHTML = "";
+  document.getElementById("batchSearchWrap").style.display = "none";
+  document.getElementById("batchPager").style.display = "none";
   document.getElementById("btnDownload").style.display = "none";
-  const file = e.target.files[0];
-  if (!file) return;
-  const rows = parseCSV(await file.text());
-  if (rows.length < 2) { errEl.textContent = "CSV appears to be empty."; errEl.style.display = "block"; return; }
+  const progress = document.getElementById("batchProgress");
+  const progressBar = document.getElementById("batchProgressBar");
+  const progressText = document.getElementById("batchProgressText");
+  progress.style.display = "none";
+  progressText.textContent = "";
+
+  const rows = parseCSV(text);
+  if (rows.length < 2) { showBatchErr("CSV appears to be empty."); return; }
 
   const header = rows[0].map(h => h.trim());
   const colFor = {};   // BBGM stat -> column index
@@ -607,10 +821,14 @@ document.getElementById("csvFile").addEventListener("change", async e => {
     else if (HEADER_ALIASES[k] && colFor[HEADER_ALIASES[k]] === undefined) colFor[HEADER_ALIASES[k]] = i;
   });
   const missing = BBGM_STATS.filter(s => colFor[s] === undefined);
-  if (missing.length) { errEl.textContent = "Missing columns: " + missing.join(", "); errEl.style.display = "block"; return; }
+  if (missing.length) { showBatchErr("Missing columns: " + missing.join(", ")); return; }
 
-  batchResults = [];
+  const total = rows.length - 1;
+  if (total > BATCH_CHUNK) progress.style.display = "block";
+
+  const results = [];
   let skipped = 0;
+  const topN = getTopN();
   for (let r = 1; r < rows.length; r++) {
     const bbgm = {};
     let bad = false;
@@ -623,40 +841,91 @@ document.getElementById("csvFile").addEventListener("change", async e => {
       bbgm[s] = v;
     }
     if (bad) { skipped++; continue; }
-    const r2 = matchArchetypes(convertPlayer(bbgm));
+    const r2 = matchArchetypes(convertPlayer(bbgm), topN);
     const rawName = nameCol >= 0 ? rows[r][nameCol] : undefined;
-    batchResults.push({
+    results.push({
       name: rawName ? rawName : `Row ${r}`,
       pos: posCol >= 0 && rows[r][posCol] ? rows[r][posCol] : "",
       matches: r2.matches,
       bestPen: r2.bestPen,
     });
+    if (r % BATCH_CHUNK === 0) {
+      progressBar.style.width = Math.round((r / total) * 100) + "%";
+      progressText.textContent = `Processing ${r.toLocaleString()} / ${total.toLocaleString()}...`;
+      await new Promise(res => setTimeout(res, 0));
+    }
   }
-  if (!batchResults.length) { errEl.textContent = "No valid rating rows found."; errEl.style.display = "block"; return; }
+  progress.style.display = "none";
+  progressText.textContent = "";
 
-  let html = `<div class="hint" style="margin-top:.75rem">${batchResults.length} player${batchResults.length === 1 ? "" : "s"} converted${skipped ? `, ${skipped} row${skipped === 1 ? "" : "s"} skipped (missing/invalid ratings)` : ""}.</div>`;
-  html += `<div class="hint">"Fit gap" is the #1 match's raw penalty (lower = closer to a real build) and is comparable across players; "%" ranks builds against each other for that one player only.</div>`;
-  html += `<table style="margin-top:.5rem"><thead><tr><th>Player</th><th>Pos</th><th>Fit gap</th>
-    <th>Best archetype</th><th>%</th><th>2nd</th><th>%</th><th>3rd</th><th>%</th></tr></thead><tbody>`;
-  for (const p of batchResults) {
-    html += `<tr><td>${esc(p.name)}</td><td>${esc(p.pos)}</td><td>${p.bestPen.toFixed(1)}</td>`;
-    for (const m of p.matches) html += `<td>${esc(m.name)} <span class="hint">(${esc(m.pos)})</span></td><td class="score ${scoreClass(m.score)}" title="${scoreLabel(m.score)}">${m.score}</td>`;
-    html += `</tr>`;
-  }
-  html += "</tbody></table>";
-  out.innerHTML = html;
+  if (!results.length) { showBatchErr("No valid rating rows found."); return; }
+
+  batchResults = results;
+  batchSkipped = skipped;
+  batchSort = { key: null, dir: 1 };
+  batchPage = 0;
+  document.getElementById("batchSearch").value = "";
+  document.getElementById("batchSearchWrap").style.display = results.length > 10 ? "block" : "none";
+  renderBatchTable();
   document.getElementById("btnDownload").style.display = "inline-block";
+}
+
+document.getElementById("csvFile").addEventListener("change", async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  await runBatch(await file.text());
   // Reset so re-selecting the same file (e.g. after fixing it and re-exporting
   // under the same name) fires 'change' again instead of going silent.
   e.target.value = "";
 });
 
+const dropzone = document.getElementById("dropzone");
+["dragenter", "dragover"].forEach(evt => dropzone.addEventListener(evt, e => {
+  e.preventDefault(); dropzone.classList.add("drag");
+}));
+["dragleave", "drop"].forEach(evt => dropzone.addEventListener(evt, e => {
+  e.preventDefault(); dropzone.classList.remove("drag");
+}));
+dropzone.addEventListener("drop", async e => {
+  const file = e.dataTransfer.files && e.dataTransfer.files[0];
+  if (!file) return;
+  await runBatch(await file.text());
+});
+
+document.getElementById("btnParsePaste").addEventListener("click", async () => {
+  const text = document.getElementById("csvPaste").value;
+  if (!text.trim()) { showBatchErr("Paste some CSV text first."); return; }
+  await runBatch(text);
+});
+
+document.getElementById("btnSampleRoster").addEventListener("click", async () => {
+  try {
+    // Served from docs/ itself (not ../data/) so it's reachable when GitHub
+    // Pages publishes only the docs/ folder, per this repo's own setup steps.
+    const res = await fetch("PlayerRatings_sample.csv");
+    if (!res.ok) throw new Error(String(res.status));
+    await runBatch(await res.text());
+  } catch {
+    showBatchErr("Couldn't load the sample roster (docs/PlayerRatings_sample.csv). " +
+      "If you opened this page directly from disk (a file:// URL), your browser may " +
+      "block loading sibling files — try GitHub Pages or a local server instead.");
+  }
+});
+
 document.getElementById("btnDownload").addEventListener("click", () => {
-  if (!batchResults) return;
+  if (!batchResults || !batchResults.length) return;
   const q = s => `"${String(s).replace(/"/g, '""')}"`;
-  let csv = "Name,Pos,FitGap,Archetype1,Pos1,Score1,Archetype2,Pos2,Score2,Archetype3,Pos3,Score3\n";
+  const maxN = Math.max(...batchResults.map(p => p.matches.length));
+  let header = "Name,Pos,FitGap";
+  for (let i = 0; i < maxN; i++) header += `,Archetype${i + 1},Pos${i + 1},Score${i + 1}`;
+  let csv = header + "\n";
   for (const p of batchResults) {
-    csv += [q(p.name), q(p.pos), p.bestPen, ...p.matches.flatMap(m => [q(m.name), q(m.pos), m.score])].join(",") + "\n";
+    const cells = [q(p.name), q(p.pos), p.bestPen];
+    for (let i = 0; i < maxN; i++) {
+      const m = p.matches[i];
+      cells.push(m ? q(m.name) : "", m ? q(m.pos) : "", m ? m.score : "");
+    }
+    csv += cells.join(",") + "\n";
   }
   const a = document.createElement("a");
   const url = URL.createObjectURL(new Blob([csv], {type: "text/csv"}));
