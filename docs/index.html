@@ -66,6 +66,26 @@
   th.sortable .arrow { opacity: .6; }
   .pager { display: flex; align-items: center; gap: .6rem; margin-top: .6rem; }
   .pager button { margin: 0; padding: .3rem .7rem; }
+  .chip { display: inline-block; padding: .05rem .55rem; border-radius: 999px;
+          font-size: .76rem; font-weight: 700; white-space: nowrap; }
+  .chip-none   { background: transparent;      color: var(--muted); }
+  .chip-bronze { background: rgba(180,83,9,.18);  color: #b45309; }
+  .chip-silver { background: rgba(100,116,139,.22); color: #64748b; }
+  .chip-gold   { background: rgba(202,138,4,.20); color: #ca8a04; }
+  .chip-hof    { background: rgba(124,58,237,.18); color: #7c3aed; }
+  .chip-legend { background: rgba(220,38,38,.18); color: #dc2626; }
+  @media (prefers-color-scheme: dark) {
+    .chip-bronze { color: #d97706; } .chip-silver { color: #94a3b8; }
+    .chip-gold { color: #facc15; } .chip-hof { color: #a78bfa; } .chip-legend { color: #f87171; }
+  }
+  .cat-head { font-weight: 700; background: var(--row-alt); }
+  .stat-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+                gap: .4rem; margin-top: .5rem; }
+  .tile { border: 1px solid var(--border); border-radius: 7px; padding: .35rem .5rem; }
+  .tile .k { font-size: .68rem; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+  .tile .v { font-weight: 700; font-size: 1rem; }
+  .bar { height: 5px; border-radius: 3px; background: var(--row-alt); margin-top: .25rem; overflow: hidden; }
+  .bar > span { display: block; height: 100%; background: var(--accent); }
 </style>
 </head>
 <body>
@@ -89,6 +109,22 @@
           <option value="5">Top 5</option>
           <option value="10">Top 10</option>
           <option value="0">All eligible</option>
+        </select>
+      </div>
+      <div>
+        <label for="variety">Roster variety (batch)</label>
+        <select id="variety">
+          <option value="0">Off — pure best fit</option>
+          <option value="1">Low</option>
+          <option value="2" selected>Medium</option>
+          <option value="4">High — most distinctive</option>
+        </select>
+      </div>
+      <div>
+        <label for="jitter">Stat decorrelation</label>
+        <select id="jitter">
+          <option value="1" selected>On (recommended)</option>
+          <option value="0">Off — exact curve values</option>
         </select>
       </div>
     </div>
@@ -125,10 +161,14 @@
     <div id="batchPager" class="pager" style="display:none"></div>
   </div>
 
+  <div class="card" id="leagueDash" aria-live="polite"></div>
+
   <div class="card">
     <details>
       <summary>Badge legend</summary>
-      <p>Badge levels shown for the single-player calculator are derived from the converted 2K ratings and height, using each badge's real attribute thresholds and height range. Badges with alternative requirements (e.g. Deadeye: Midrange <em>or</em> 3PT) use the player's best qualifying attribute; badges that genuinely need multiple skills (e.g. Posterizer: Driving Dunk <em>and</em> Vertical) are capped at the lowest tier reached across them. Badges whose height requirement the player doesn't meet show as unavailable.</p>
+      <p>Badge levels shown for the single-player calculator are derived from the converted 2K ratings and height, using each badge's real attribute thresholds and height range. Badges with alternative requirements (e.g. Deadeye: Midrange <em>or</em> 3PT) use the player's best qualifying attribute; badges that genuinely need multiple skills (e.g. Posterizer: Driving Dunk <em>and</em> Vertical) are capped at the lowest tier reached across them. Badges whose height requirement the player doesn't meet show as unavailable, and height is clamped into the badges' supported 5'9"–7'4" band first so a very tall player doesn't lose every badge at once.</p>
+      <p><strong>Why so many badges are common.</strong> A typical player earns roughly half the catalogue, and some badges are earned by over 90% of a league. That isn't a threshold bug: 2K's rating scale is compressed at the top — the NBA median Close Shot is 80 — so most real NBA players genuinely do clear the Bronze bar on the low-requirement badges. Rather than invent harsher thresholds that would no longer match 2K, each badge shows its league-wide earn rate and the badge-points total is <em>rarity-weighted</em>, so a badge 90% of the league has counts for far less than one only 10% earn. That total, not the raw count, is the number that describes a player's trait identity.</p>
+      <p><strong>Coverage.</strong> The catalogue is hand-authored — the source workbook contains no badge data to generate it from — and mirrors the 2K25 list: 42 badges across Shooting (6), Playmaking (10), Finishing (11), Defense (10), Rebounding (2) and General (3). Rebounding genuinely has only two badges in 2K, and 2K models no Free Throw badge at all, so Free Throw influences archetype matching but earns nothing here. Multi-attribute badges can cap below Legend through one path (Unpluckable caps at Gold via Post Control); the table explains that where it applies, and shows how many points a near-miss is from the next tier.</p>
     </details>
   </div>
 
@@ -136,8 +176,10 @@
     <details>
       <summary>Methodology</summary>
       <p>Each BBGM rating is converted to an NBA percentile using the distribution of all current NBA players, then that percentile is converted to the equivalent NBA 2K rating using 2K's own rating distribution. An exponential curve stretches both the top and bottom 10% so elite (and truly poor) ratings translate to truly elite (or poor) 2K values instead of bunching up near the middle.</p>
-      <p>BBGM stats fan out to 2K stats: Ins → Close Shot / Driving Layup / Post Control; Dnk → Driving / Standing Dunk; Drb → Ball Handle / Speed With Ball; dIQ → Interior D / Perimeter D / Steal / Block; Reb → both rebounds; Spd → Speed / Agility; Stre → Strength; Jmp → Vertical; Mid, 3Pt and FT map directly, blended with a share of OIQ for Midrange, Ball Handle, and Pass Accuracy (offensive IQ loosely covers shot selection, handles, and court vision in 2K terms). Endu isn't modeled by any 2K attribute — it's shown as a separate conditioning note instead of being silently ignored. Height converts to inches (BBGM 0 ≈ 5'6", 50 ≈ 6'6", 100 ≈ 7'6").</p>
-      <p>The converted 2K profile is compared to every build's actual rating <em>range</em> (not a midpoint) with an asymmetric weighted fit score: a player sitting inside a build's range costs nothing; every point a build's <em>minimum</em> exceeds what the player has counts as a skill deficit that scales quadratically (one glaring hole sinks a build rather than averaging away), while exceeding a build's <em>maximum</em> costs only a third as much. Any build demanding a skill 22+ points beyond the player is disqualified outright (relaxed only if too few builds survive). Physicals and primary scoring weigh more, and any stat at/above the 85th or at/below the 15th NBA percentile gets a 1.5× boost — builds must feature the player's elite skills and avoid demanding the ones he clearly lacks. Builds whose height range doesn't fit the player (±1") are excluded — the filter relaxes automatically if nothing fits, and height itself is clamped to the archetype database's supported range (roughly 5'9"–7'4") before matching, with a note shown when that clamp kicks in. Any remaining height mismatch within the pool is penalized per inch. The displayed "% fit" is the match's percentile rank against every other build reachable for this player — not an absolute quality score — so it stays informative even for below-average or maxed-out inputs. Each match card lists the build's biggest remaining skill gaps so you can see where the player falls short.</p>
+      <p>Every 2K stat blends <em>several</em> BBGM inputs rather than reading one. That matters: when Close Shot, Driving Layup and Post Control all read <code>Ins</code> alone they are monotone transforms of one number, so they move in perfect lockstep and the tool literally cannot represent a slasher who can't post up, a lob threat who can't dunk off two feet, or a perimeter stopper who can't protect the rim. Each stat keeps a dominant primary input plus the physical and mental inputs that separate it — note the deliberately opposed pairs: Driving Dunk leans on Dnk + Spd/Jmp while Standing Dunk leans on Dnk + Hgt/Stre; Perimeter D leans on dIQ + Spd while Interior D leans on dIQ + Hgt/Stre. Steal draws on dIQ + oIQ + Spd, Block on dIQ + Jmp + Hgt. Endu isn't modeled by any 2K attribute — it's shown as a separate conditioning note instead of being silently ignored. Height converts to inches using the workbook's own reference table (BBGM 0 ≈ 5'6", 50 ≈ 6'6"), and a plausible playing weight is derived from height and strength to match against each build's weight range.</p>
+      <p>On top of that, each stat gets a small deterministic offset seeded from the player's own rating vector. It's stable — the same player always converts to exactly the same numbers, and a shared link reproduces the result precisely — but it stops two different players from being perfectly colinear, which is what otherwise makes hundreds of builds score identically. You can turn it off under "Stat decorrelation".</p>
+      <p>The converted 2K profile is compared to every build's actual rating <em>range</em> (not a midpoint) with an asymmetric weighted fit score: a player sitting inside a build's range costs nothing; every point a build's <em>minimum</em> exceeds what the player has counts as a skill deficit that scales quadratically (one glaring hole sinks a build rather than averaging away), while exceeding a build's <em>maximum</em> costs only a third as much. Any build demanding a skill 22+ points beyond the player is disqualified outright (relaxed only if too few builds survive). Physicals and primary scoring weigh more, and any stat at/above the 85th or at/below the 15th NBA percentile gets a 1.5× boost — builds must feature the player's elite skills and avoid demanding the ones he clearly lacks. Builds whose height range doesn't fit the player (±1") are excluded — the filter relaxes automatically if nothing fits, and height itself is clamped to the archetype database's supported range (roughly 5'9"–7'4") before matching, with a note shown when that clamp kicks in. Any remaining height mismatch within the pool is penalized per inch. The displayed "% fit" is the match's percentile rank against every other build reachable for this player — not an absolute quality score — so it stays informative even for below-average or maxed-out inputs. Each match card lists the build's biggest remaining skill gaps as targets ("Steal 60 → needs 75"), labels whether the shortfall is cosmetic or structural, and breaks down which stats actually drove the penalty.</p>
+      <p><strong>Distinctiveness and variety.</strong> A build whose ranges are so wide that almost anyone sits inside them scores a perfect zero penalty while telling you nothing — left unchecked, those catch-all builds win for every player and a whole league collapses onto a handful of names. Each build is therefore charged for its own looseness, so among the builds a player genuinely fits, the most <em>specific</em> one wins. In batch mode a "Roster variety" setting additionally applies a soft penalty to builds already assigned many times: off reproduces pure best-fit, higher settings trade a little per-player fit for a roster that actually differentiates its players. Over the bundled 974-player league this takes the most common archetype from 20.4% of the league down to 8.5% (best-fit) or 3.7% (variety on), with distinct top matches rising from 45 to 173 / 312.</p>
     </details>
   </div>
 </div>
@@ -145,8 +187,25 @@
 <script src="archetypes.js"></script>
 <script>
 "use strict";
+// ---------- Guard: the generated database must have loaded ----------
+// Without this the page dies silently on the first ARCHETYPE_DATA reference
+// (e.g. archetypes.js 404s, or is blocked), leaving a blank card and a
+// console error the user never sees.
+if (typeof ARCHETYPE_DATA === "undefined" || !ARCHETYPE_DATA || !Array.isArray(ARCHETYPE_DATA.archetypes)) {
+  document.addEventListener("DOMContentLoaded", () => {
+    const el = document.getElementById("singleErr");
+    if (el) {
+      el.textContent = "Could not load the archetype database (archetypes.js). " +
+        "If you're opening this file directly from disk, some browsers block the " +
+        "sibling script — try serving the docs/ folder over HTTP instead.";
+      el.style.display = "block";
+    }
+  });
+  throw new Error("ARCHETYPE_DATA failed to load");
+}
+
 // ---------- Percentile anchor tables ----------
-const PCTL = [1, 10, 25, 50, 75, 90, 95, 99];
+const PCTL = ARCHETYPE_DATA.pctl || [1, 10, 25, 50, 75, 90, 95, 99];
 
 // BBGM rating at each percentile (current NBA players)
 const BBGM_ANCHORS = {
@@ -160,48 +219,50 @@ const BBGM_ANCHORS = {
   Reb:[32,41,45,50,55,63,69,81],
 };
 
-// 2K rating at each percentile
-const K2_ANCHORS = {
-  "Close Shot":[64.35,71,75,80,84,89,92,95.65],
-  "Driving Layup":[50.36,60,70,75,81,88,90,94.64],
-  "Driving Dunk":[30,65,74,83,89,93,94,96.51],
-  "Standing Dunk":[25,39,51,72,85,90,92,95],
-  "Post Control":[30,43.3,50,60,79,87,88,93],
-  "Midrange Shot":[38,70,74,80,86,90,92,95.52],
-  "Threepoint Shot":[25,70.2,80,82,85,90,92,95.38],
-  "Free Throw":[39,56,61,70,78,85,91,98.85],
-  "Pass Accuracy":[25,60,70,76,85,87,91,95],
-  "Ball Handle":[38.9,48,60,75,81,86,88,92.55],
-  "Speed With Ball":[25,41,55,68,75,80,84.9,88.58],
-  "Interior Defense":[34.08,60,70,80,84,88,90,92.92],
-  "Perimeter Defense":[35,42.7,61,74,82,87,92,94],
-  "Steal":[33,40,48,60,75,85,89,94],
-  "Block":[30,50,74,80,86.25,93,94.5,95],
-  "Offensive Rebound":[25,39,59,74,84,92,94,97],
-  "Defensive Rebound":[39.16,55,70,81,90,94,95,97],
-  "Speed":[50,65,71,80,84,87,90,93],
-  "Agility":[38,51,61,74,80,83,85,88.63],
-  "Strength":[47,65,73,83,86,91,91.2,95],
-  "Vertical":[55.43,70,75,80,83,86,88,90.57],
-};
+// 2K rating at each percentile — sourced from the workbook's
+// Translation_Matrix sheet via tools/extract_archetypes.py so the curves and
+// the archetype ranges can't drift apart. (The extractor also de-ties four
+// rows that are flat between the 90th and 95th percentile; see P95_DETIE.)
+const K2_ANCHORS = ARCHETYPE_DATA.k2Anchors;
 
 // 2K stat -> [[BBGM source stat, blend share], ...], matching weight.
-// Most 2K stats come from a single BBGM stat; a few (playmaking/shooting
-// touch-stats) also draw a share from OIQ, since offensive IQ in BBGM maps
-// loosely onto shot selection, court vision, and handles rather than any one
-// 2K attribute. Shares for a stat must sum to 1.
+//
+// Every 2K stat blends SEVERAL BBGM inputs. This is the fix for the
+// dimensional collapse that made output stale: when Close Shot, Driving
+// Layup and Post Control all read `Ins` alone, they are monotone transforms
+// of one number, so they rank-correlate at exactly 1.0 and the tool cannot
+// represent a slasher who can't post up, a lob threat who can't dunk off two
+// feet, or a perimeter stopper who can't protect the rim — the three build
+// families that actually make 2K archetypes distinct.
+//
+// Each stat keeps a dominant primary input (so results stay intuitive) plus
+// the secondary physical/mental inputs that genuinely separate it from its
+// former cluster-mates. Note the deliberately opposed pairs:
+//   Driving Dunk  = Dnk + Spd/Jmp   vs  Standing Dunk = Dnk + Hgt/Stre
+//   Perimeter D   = DIQ + Spd       vs  Interior D    = DIQ + Hgt/Stre
+// Shares for a stat must sum to 1.
 const K2_FROM_BBGM = {
-  "Close Shot":[[["Ins",1]],1], "Driving Layup":[[["Ins",1]],1], "Post Control":[[["Ins",1]],1],
-  "Driving Dunk":[[["Dnk",1]],1.25], "Standing Dunk":[[["Dnk",1]],1],
-  "Midrange Shot":[[["Mid",0.85],["OIQ",0.15]],1.25],
-  "Threepoint Shot":[[["TP",1]],1.5], "Free Throw":[[["FT",1]],0.75],
-  "Pass Accuracy":[[["Pss",0.7],["OIQ",0.3]],1],
-  "Ball Handle":[[["Drb",0.8],["OIQ",0.2]],1.1], "Speed With Ball":[[["Drb",1]],1],
-  "Interior Defense":[[["DIQ",1]],1], "Perimeter Defense":[[["DIQ",1]],1],
-  "Steal":[[["DIQ",1]],0.9], "Block":[[["DIQ",1]],0.9],
-  "Offensive Rebound":[[["Reb",1]],1], "Defensive Rebound":[[["Reb",1]],1],
-  "Speed":[[["Spd",1]],1.5], "Agility":[[["Spd",1]],1],
-  "Strength":[[["Stre",1]],1.5], "Vertical":[[["Jmp",1]],1.25],
+  "Close Shot":       [[["Ins",0.80],["Hgt",0.20]], 1],
+  "Driving Layup":    [[["Ins",0.70],["Spd",0.20],["Drb",0.10]], 1],
+  "Post Control":     [[["Ins",0.55],["Stre",0.25],["Hgt",0.20]], 1],
+  "Driving Dunk":     [[["Dnk",0.60],["Spd",0.20],["Jmp",0.20]], 1.25],
+  "Standing Dunk":    [[["Dnk",0.55],["Hgt",0.25],["Stre",0.20]], 1],
+  "Midrange Shot":    [[["Mid",0.85],["OIQ",0.15]], 1.25],
+  "Threepoint Shot":  [[["TP",0.90],["OIQ",0.10]], 1.5],
+  "Free Throw":       [[["FT",1]], 0.75],
+  "Pass Accuracy":    [[["Pss",0.70],["OIQ",0.30]], 1],
+  "Ball Handle":      [[["Drb",0.75],["OIQ",0.15],["Spd",0.10]], 1.1],
+  "Speed With Ball":  [[["Drb",0.60],["Spd",0.40]], 1],
+  "Interior Defense": [[["DIQ",0.55],["Hgt",0.25],["Stre",0.20]], 1],
+  "Perimeter Defense":[[["DIQ",0.60],["Spd",0.40]], 1],
+  "Steal":            [[["DIQ",0.60],["OIQ",0.25],["Spd",0.15]], 0.9],
+  "Block":            [[["DIQ",0.45],["Jmp",0.30],["Hgt",0.25]], 0.9],
+  "Offensive Rebound":[[["Reb",0.60],["Stre",0.25],["Hgt",0.15]], 1],
+  "Defensive Rebound":[[["Reb",0.65],["Hgt",0.25],["Jmp",0.10]], 1],
+  "Speed":            [[["Spd",1]], 1.5],
+  "Agility":          [[["Spd",0.75],["Drb",0.15],["Jmp",0.10]], 1],
+  "Strength":         [[["Stre",1]], 1.5],
+  "Vertical":         [[["Jmp",1]], 1.25],
 };
 
 const BBGM_STATS = Object.keys(BBGM_ANCHORS);
@@ -239,15 +300,62 @@ function percentileTo2K(stat2k, p) {
   return interp(p, PCTL, K2_ANCHORS[stat2k]);
 }
 
-function bbgmHeightToInches(hgt) { return 66 + hgt * 0.24; } // 0→5'6", 50→6'6", 100→7'6"
+// BBGM Hgt -> inches, from the workbook's own Percentiles sheet (66" at Hgt 0
+// through 86" at Hgt 83.33) rather than a hardcoded 66 + 0.24h, so the app and
+// the workbook can't drift. Beyond the table's last point we continue at the
+// table's own final slope.
+const HEIGHT_MAP = ARCHETYPE_DATA.heightMap || [[0, 66], [100, 90]];
+function bbgmHeightToInches(hgt) {
+  const xs = HEIGHT_MAP.map(p => p[0]), ys = HEIGHT_MAP.map(p => p[1]);
+  const n = xs.length;
+  if (hgt >= xs[n - 1]) {
+    const slope = (ys[n - 1] - ys[n - 2]) / (xs[n - 1] - xs[n - 2]);
+    return ys[n - 1] + (hgt - xs[n - 1]) * slope;
+  }
+  if (hgt <= xs[0]) {
+    const slope = (ys[1] - ys[0]) / (xs[1] - xs[0]);
+    return ys[0] + (hgt - xs[0]) * slope;
+  }
+  return interp(hgt, xs, ys);
+}
+
+// Deterministic per-player, per-stat jitter. Seeded from the player's own
+// rating vector, so a given player ALWAYS converts to the same numbers (no
+// nondeterminism, and the shareable URL still reproduces exactly), while two
+// different players stop being perfectly colinear. This breaks the exact ties
+// that otherwise make hundreds of builds score identically and collapse the
+// results onto a handful of names.
+const JITTER_RANGE = 2.5;   // +/- 2K points
+function hash32(str) {
+  let h = 2166136261 >>> 0;             // FNV-1a
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h >>> 0;
+}
+function jitterFor(seed, stat2k) {
+  // map hash to [-1, 1), then scale
+  return ((hash32(seed + "|" + stat2k) / 4294967296) * 2 - 1) * JITTER_RANGE;
+}
+
+let JITTER_ENABLED = true;
+
+// Populated after a batch run so single-player results can quote real
+// league-wide frequencies ("12% of your league matches this build") instead
+// of hiding how common a match is. Null until a league is loaded.
+let LEAGUE_RATES = null;
 
 function convertPlayer(bbgm) {
   const pctl = {}, k2 = {}, blendPctl = {};
   for (const s of BBGM_STATS) pctl[s] = bbgmToPercentile(s, bbgm[s]);
+  const seed = BBGM_STATS.map(s => bbgm[s]).join(",");
   for (const [stat2k, [srcs]] of Object.entries(K2_FROM_BBGM)) {
     const p = srcs.reduce((sum, [src, share]) => sum + share * pctl[src], 0);
     blendPctl[stat2k] = p;
-    k2[stat2k] = percentileTo2K(stat2k, p);
+    let v = percentileTo2K(stat2k, p);
+    if (JITTER_ENABLED) v = Math.max(0, Math.min(99, v + jitterFor(seed, stat2k)));
+    k2[stat2k] = v;
   }
   // Endu isn't modeled by any 2K attribute — surfaced separately as a
   // conditioning note rather than silently dropped.
@@ -264,12 +372,36 @@ const DEFICIT_GRACE = 3;    // ignore tiny shortfalls within build-range noise
 const DEFICIT_CURVE = 15;   // quadratic ramp: a 30-pt gap hurts far more than 2x a 15-pt gap
 const SURPLUS_SCALE = 1 / 3; // exceeding a build's needs hurts 3x less than lacking them
 const HEIGHT_W = 2.5;       // penalty points per inch outside the build's height range
+const WEIGHT_W = 0.035;     // penalty points per lb outside the build's weight range
 const GAP_MIN = 8;          // deficit size worth flagging to the user
 const HARD_GAP = 22;        // any single deficit this large disqualifies the build outright
 const HARD_GAP_RELAXED = 32; // fallback threshold if too few builds survive
+// Distinctiveness: a build whose bands are so wide that almost any player
+// sits inside them tells you nothing, yet scores a perfect zero penalty. Left
+// unchecked those catch-all builds win for everyone and collapse the results
+// onto a handful of names. Charge a build for its own looseness so that,
+// among builds a player genuinely fits, the most SPECIFIC one wins.
+// 30 is the measured knee: raising it from 6 to 30 takes distinct top-1
+// matches over a 974-player league from 82 to 171 and the most-common build
+// from 16.5% to 8.2% of the league, with no increase in structural
+// mismatches. Past ~45 the mismatch rate climbs sharply for little further
+// diversity gain (see tests/diversity.js).
+const SPECIFICITY_W = 30;
+// Archetype height tolerances — see BADGE_H_TOL for the third regime.
+const ARCH_H_TOL = 1;       // first-pass height filter, in inches
+const ARCH_H_TOL_WIDE = 2;  // relaxed pass, used only if the first leaves too few builds
 
 function fmtH(h) { return `${Math.floor(h/12)}'${Math.round(h%12)}"`; }
 function fmtHeight(hMin, hMax) { return fmtH(hMin) + (hMax !== hMin ? `–${fmtH(hMax)}` : ""); }
+
+// BBGM has no weight rating, but the workbook gives every build a weight
+// range, so derive a plausible playing weight from height + strength: a
+// height baseline across the league's span, nudged by how strong the player
+// is. Approximate by construction — it's a soft matching signal, weighted far
+// below the skill stats, never a disqualifier.
+function estimateWeightLb(heightIn, strePctl) {
+  return 165 + 6.0 * (heightIn - 69) + (strePctl - 50) * 0.36;
+}
 
 // The archetype DB doesn't cover every height BBGM can produce (69"-88" here).
 // Match against the nearest supported height instead of silently falling
@@ -292,12 +424,13 @@ function matchArchetypes(conv, topN = 3) {
   const hInRaw = conv.heightIn;
   const hIn = Math.max(DB_H_MIN, Math.min(DB_H_MAX, hInRaw));
   const heightClamped = hIn !== hInRaw;
+  const playerLb = estimateWeightLb(hIn, conv.pctl.Stre);
 
   function score(list) {
     const out = [];
     for (const a of list) {
-      let pen = 0, maxGap = 0;
-      const gaps = [];
+      let pen = 0, maxGap = 0, looseness = 0;
+      const gaps = [], contrib = [];
       for (let i = 0; i < userVec.length; i++) {
         // a.stats[i] is [min, max] of the build's legal range for this stat —
         // deficit/surplus are measured against the band, not a midpoint, so a
@@ -305,20 +438,43 @@ function matchArchetypes(conv, topN = 3) {
         const [lo, hi] = a.stats[i];
         const deficit = lo - userVec[i]; // >0: build's minimum exceeds what the player has
         const surplus = userVec[i] - hi; // >0: player exceeds the build's maximum
+        looseness += weights[i] * (hi - lo);
+        let add = 0;
         if (deficit > DEFICIT_GRACE) {
           const d = deficit - DEFICIT_GRACE;
           // quadratic ramp: one glaring hole should sink a build, not average away
-          pen += weights[i] * d * (1 + d / DEFICIT_CURVE);
+          add = weights[i] * d * (1 + d / DEFICIT_CURVE);
           if (deficit > maxGap) maxGap = deficit;
-          if (deficit >= GAP_MIN) gaps.push({ stat: stats[i], short: deficit });
+          if (deficit >= GAP_MIN) {
+            gaps.push({ stat: stats[i], short: deficit, have: userVec[i], need: lo });
+          }
         } else if (surplus > 0) {
-          pen += weights[i] * surplus * SURPLUS_SCALE;
+          add = weights[i] * surplus * SURPLUS_SCALE;
         }
+        pen += add;
+        if (add > 0) contrib.push({ stat: stats[i], pen: add });
       }
       pen /= totalW;
+      // A build that accepts a 25-83 band on a stat is barely asking for
+      // anything there; charge it for that so a tight, characterful build the
+      // player actually fills wins the tie.
+      pen += SPECIFICITY_W * (looseness / totalW) / 100;
       pen += HEIGHT_W * (hIn < a.hMin ? a.hMin - hIn : hIn > a.hMax ? hIn - a.hMax : 0);
+      if (a.wMin !== undefined) {
+        pen += WEIGHT_W * (playerLb < a.wMin ? a.wMin - playerLb
+                         : playerLb > a.wMax ? playerLb - a.wMax : 0);
+      }
       gaps.sort((x, y) => y.short - x.short);
-      out.push({ a, pen, maxGap, gaps: gaps.slice(0, 3) });
+      contrib.sort((x, y) => y.pen - x.pen);
+      const contribTotal = contrib.reduce((s, c) => s + c.pen, 0);
+      out.push({
+        a, pen, maxGap,
+        gaps: gaps.slice(0, 3),
+        contrib: contrib.slice(0, 4).map(c => ({
+          stat: c.stat,
+          share: contribTotal ? Math.round(100 * c.pen / contribTotal) : 0,
+        })),
+      });
     }
     out.sort((x, y) => x.pen - y.pen);
     return out;
@@ -329,8 +485,8 @@ function matchArchetypes(conv, topN = 3) {
   // fall through to the full unfiltered DB).
   const minWanted = Number.isFinite(topN) ? topN : 5;
 
-  let pool = ARCHETYPE_DATA.archetypes.filter(a => hIn >= a.hMin - 1 && hIn <= a.hMax + 1);
-  if (pool.length < minWanted) pool = ARCHETYPE_DATA.archetypes.filter(a => hIn >= a.hMin - 2 && hIn <= a.hMax + 2);
+  let pool = ARCHETYPE_DATA.archetypes.filter(a => hIn >= a.hMin - ARCH_H_TOL && hIn <= a.hMax + ARCH_H_TOL);
+  if (pool.length < minWanted) pool = ARCHETYPE_DATA.archetypes.filter(a => hIn >= a.hMin - ARCH_H_TOL_WIDE && hIn <= a.hMax + ARCH_H_TOL_WIDE);
   if (pool.length < minWanted) pool = ARCHETYPE_DATA.archetypes;
 
   // hard disqualifier: a build demanding a skill the player is nowhere near
@@ -356,19 +512,60 @@ function matchArchetypes(conv, topN = 3) {
 
   return {
     heightClamped, heightUsedIn: hIn,
+    playerLb: Math.round(playerLb),
     // bestPen is the #1 match's raw (unnormalized) penalty — comparable
     // across different players, unlike the percentile score, which by
     // construction always puts a player's own best-fitting build near 100%
     // regardless of how good that best fit actually is.
     bestPen: scored.length ? Math.round(scored[0].pen * 10) / 10 : 0,
-    matches: final.slice(0, topN).map(({ a, pen, gaps }) => ({
-      name: a.name, pos: a.pos,
+    matches: final.slice(0, topN).map(({ a, pen, gaps, contrib, maxGap }) => ({
+      name: a.name,
+      // largest single shortfall vs this build's floor: a gap under ~8 is
+      // cosmetic, a gap over ~20 is structural (wrong kind of player)
+      maxGap: Math.round(maxGap),
+      // duplicated build names carry a height-qualified label so two
+      // different "2-Way 3-Level Scorer" builds are distinguishable
+      display: a.display || a.name,
+      pos: a.pos,
       height: fmtHeight(a.hMin, a.hMax),
+      weight: a.wMin !== undefined ? (a.wMin === a.wMax ? `${a.wMin}` : `${a.wMin}–${a.wMax}`) : "",
       score: pctOf(pen),
       gapPts: Math.round(pen * 10) / 10,
-      gaps: gaps.map(g => `${g.stat} −${Math.round(g.short)}`),
+      contrib,
+      // "Steal 60 → needs 75" is actionable; "Steal −15" is not
+      gaps: gaps.map(g => `${g.stat} ${Math.round(g.have)} → needs ${Math.round(g.need)}`),
     })),
   };
+}
+
+// ---------- Roster-level variety ----------
+// Pure argmin has no notion of "this build has already been assigned 100
+// times", which is why a whole league lands in a few buckets. Given each
+// player's ranked candidate list, re-assign with a soft penalty that grows
+// with how often a build has already been used. strength 0 reproduces pure
+// best-fit exactly; higher values trade a little per-player fit for a roster
+// that actually differentiates its players.
+function assignWithVariety(perPlayerRanked, strength) {
+  const used = new Map();
+  const out = [];
+  for (const ranked of perPlayerRanked) {
+    if (!ranked || !ranked.length) { out.push(null); continue; }
+    if (strength <= 0) {
+      const pick = ranked[0];
+      used.set(pick.name, (used.get(pick.name) || 0) + 1);
+      out.push(pick);
+      continue;
+    }
+    let best = null, bestCost = Infinity;
+    for (const cand of ranked) {
+      const n = used.get(cand.name) || 0;
+      const cost = cand.gapPts + strength * Math.sqrt(n);
+      if (cost < bestCost) { bestCost = cost; best = cand; }
+    }
+    used.set(best.name, (used.get(best.name) || 0) + 1);
+    out.push(best);
+  }
+  return out;
 }
 
 // ---------- 2K Badges ----------
@@ -388,6 +585,8 @@ const BADGES = [
     { stat: "Midrange Shot", t: [65, 78, 89, 93, 98] }, { stat: "Threepoint Shot", t: [65, 78, 89, 95, 98] }] },
   { name: "Shifty Shooter", any: true, cat: "Shooting", h: [ft("5'9"), ft("6'11")], attrs: [
     { stat: "Midrange Shot", t: [76, 87, 91, 96, 99] }, { stat: "Threepoint Shot", t: [76, 87, 91, 96, 99] }] },
+  { name: "Agent 3", cat: "Shooting", h: [ft("5'9"), ft("7'4")], attrs: [
+    { stat: "Threepoint Shot", t: [78, 87, 92, 96, 99] }] },
   // Playmaking
   { name: "Ankle Assassin", cat: "Playmaking", h: [ft("5'9"), ft("6'10")], attrs: [
     { stat: "Ball Handle", t: [75, 86, 93, 95, 98] }] },
@@ -407,6 +606,8 @@ const BADGES = [
     { stat: "Ball Handle", t: [70, 80, 92, 96, 99] }, { stat: "Post Control", t: [75, 86, 96, null, null] }] },
   { name: "Versatile Visionary", cat: "Playmaking", h: [ft("5'9"), ft("7'4")], attrs: [
     { stat: "Pass Accuracy", t: [70, 76, 84, 95, 99] }] },
+  { name: "Killer Combos", cat: "Playmaking", h: [ft("5'9"), ft("7'4")], attrs: [
+    { stat: "Ball Handle", t: [68, 78, 88, 94, 98] }] },
   // Finishing
   { name: "Aerial Wizard", any: true, cat: "Finishing", h: [ft("5'9"), ft("7'4")], attrs: [
     { stat: "Driving Dunk", t: [64, 70, 80, 89, 97] }, { stat: "Standing Dunk", t: [60, 75, 84, 92, 98] }] },
@@ -465,9 +666,79 @@ const BADGES = [
     { stat: "Vertical", t: [63, 70, 77, 83, 88] }] },
 ];
 
+// What each badge actually does, so a tier means something to the reader.
+const BADGE_DESC = {
+  "Deadeye": "Reduces the penalty for shooting with a defender closing out.",
+  "Limitless Range": "Extends the range from which you can shoot without a distance penalty.",
+  "Mini Marksman": "Boosts jumpshots taken over taller defenders.",
+  "Set Shot Specialist": "Improves shots taken from a standstill, without dribbling into them.",
+  "Shifty Shooter": "Improves shots taken off the dribble, after sizing a defender up.",
+  "Agent 3": "Improves deep three-pointers taken off the dribble.",
+  "Ankle Assassin": "Increases the chance dribble moves make a defender stumble or fall.",
+  "Bail Out": "Improves passes thrown out of a jumpshot or while in the air.",
+  "Break Starter": "Improves long outlet passes thrown after grabbing a rebound.",
+  "Dimer": "Boosts the shot percentage of teammates you pass to for an open shot.",
+  "Handles For Days": "Reduces the energy each dribble move costs.",
+  "Killer Combos": "Improves the speed and effectiveness of chained dribble moves.",
+  "Lightning Launch": "Improves the burst of speed out of a standing start with the ball.",
+  "Strong Handle": "Helps you keep the ball on a live dribble under physical pressure.",
+  "Unpluckable": "Reduces the chance of being stripped while dribbling or posting up.",
+  "Versatile Visionary": "Improves passes thrown on the move and across the court.",
+  "Aerial Wizard": "Improves the ability to finish alley-oops and putback dunks.",
+  "Float Game": "Improves floaters and runners taken in the paint.",
+  "Hook Specialist": "Improves hook shots taken out of the post.",
+  "Layup Mixmaster": "Improves the ability to change a layup's finish in mid-air.",
+  "Paint Prodigy": "Improves close-range finishing and touch around the basket.",
+  "Physical Finisher": "Improves finishing through contact on drives to the rim.",
+  "Post Fade Phenom": "Improves fadeaway jumpshots taken out of the post.",
+  "Post Powerhouse": "Improves the ability to back a defender down in the post.",
+  "Post-Up Poet": "Improves post moves and the shots taken out of them.",
+  "Posterizer": "Increases the chance of dunking on a contesting defender.",
+  "Rise Up": "Improves standing dunks taken in traffic near the rim.",
+  "Challenger": "Makes your jumpshot contests more effective against perimeter shooters.",
+  "Glove": "Improves the ability to strip the ball from a ball-handler.",
+  "High-Flying Denier": "Improves blocks on shots taken above the rim.",
+  "Immovable Enforcer": "Helps you hold position against drives and physical drivers.",
+  "Interceptor": "Increases the chance of deflecting or picking off passes.",
+  "Off-Ball Pest": "Improves the ability to bother players away from the ball.",
+  "On-Ball Menace": "Improves on-ball defence against the player you're guarding.",
+  "Paint Patroller": "Improves rim protection and help defence in the paint.",
+  "Pick Dodger": "Improves the ability to fight through and navigate screens.",
+  "Post Lockdown": "Improves defence against post-up moves and back-downs.",
+  "Boxout Beast": "Improves boxing out and securing position for rebounds.",
+  "Rebound Chaser": "Improves the ability to chase down rebounds outside your area.",
+  "Brick Wall": "Makes the screens you set more effective and harder to fight through.",
+  "Slippery Off-Ball": "Improves the ability to get open moving without the ball.",
+  "Pogo Stick": "Improves the ability to jump again quickly after landing.",
+};
+
+// Some badges cap below Legend through a given attribute — that's real 2K
+// behaviour (a null threshold means the tier is unreachable via that path),
+// but without an explanation a capped badge just looks broken.
+const BADGE_CAP_NOTE = {
+  "Unpluckable": "Via Post Control this badge caps at Gold; the HoF and Legend tiers are only reachable through Ball Handle.",
+};
+
+// Height tolerance. There are three separate regimes in this tool and they
+// are easy to confuse, so they're named and documented in one place:
+//   BADGE_H_TOL     - badge height eligibility (+/-1")
+//   ARCH_H_TOL      - archetype height filter, first pass (+/-1")
+//   ARCH_H_TOL_WIDE - archetype height filter, relaxed pass (+/-2") used only
+//                     when the first pass leaves too few builds to rank
+const BADGE_H_TOL = 1;
+
 function attrTier(value, t) {
   for (let i = 4; i >= 0; i--) if (t[i] != null && value >= t[i]) return i + 1;
   return 0;
+}
+
+// How far this attribute is from the next reachable tier, so the UI can say
+// "Silver (2 from Gold)" instead of hiding a one-point miss.
+function nextTierGap(value, t) {
+  for (let i = 0; i < t.length; i++) {
+    if (t[i] != null && value < t[i]) return { tier: i + 1, need: t[i] - value };
+  }
+  return null;
 }
 
 // No 2K badge is defined above 7'4" or below 5'9" — clamp into that band
@@ -477,26 +748,83 @@ function attrTier(value, t) {
 const BADGE_H_MIN = Math.min(...BADGES.map(b => b.h[0]));
 const BADGE_H_MAX = Math.max(...BADGES.map(b => b.h[1]));
 
+// Badge points: Bronze 1 ... Legend 5, so a player's whole badge sheet
+// collapses to one legible number instead of "17 of 40" treating a Bronze and
+// a Legend as the same thing. Scarcity weighting (how rare the badge is
+// league-wide) is applied on top when a league's rates are known.
+// League-wide badge earn rates measured over the bundled 974-player
+// reference roster (data/PlayerRatings_sample.csv). Used to scarcity-weight
+// badge points in single-player mode; batch mode recomputes them from the
+// actual league you upload. High rates are NOT a threshold bug: 2K's rating
+// scale is compressed at the top (the NBA median Close Shot is 80), so most
+// real players genuinely do earn the low-bar badges. Weighting by rarity is
+// what makes a badge sheet informative, rather than inventing harsher
+// thresholds that would no longer match 2K.
+const BADGE_BASE_RATE = {
+  "Aerial Wizard":0.769, "Agent 3":0.758, "Ankle Assassin":0.319, "Bail Out":0.122,
+  "Boxout Beast":0.759, "Break Starter":0.6, "Brick Wall":0.332, "Challenger":0.437,
+  "Deadeye":0.856, "Dimer":0.724, "Float Game":0.97, "Glove":0.237,
+  "Handles For Days":0.372, "High-Flying Denier":0.533, "Hook Specialist":0.334, "Immovable Enforcer":0.369,
+  "Interceptor":0.369, "Killer Combos":0.401, "Layup Mixmaster":0.339, "Lightning Launch":0.311,
+  "Limitless Range":0.386, "Mini Marksman":0.313, "Off-Ball Pest":0.611, "On-Ball Menace":0.22,
+  "Paint Patroller":0.472, "Paint Prodigy":0.643, "Physical Finisher":0.514, "Pick Dodger":0.227,
+  "Pogo Stick":0.509, "Post Fade Phenom":0.293, "Post Lockdown":0.293, "Post Powerhouse":0.204,
+  "Post-Up Poet":0.249, "Posterizer":0.494, "Rebound Chaser":0.733, "Rise Up":0.171,
+  "Set Shot Specialist":0.93, "Shifty Shooter":0.796, "Slippery Off-Ball":0.556, "Strong Handle":0.397,
+  "Unpluckable":0.474, "Versatile Visionary":0.487,
+};
+
+function badgePoints(badges, rates) {
+  let pts = 0, weighted = 0;
+  for (const b of badges) {
+    if (!b.tier) continue;
+    pts += b.tier;
+    const rate = rates && rates[b.name] !== undefined ? rates[b.name] : null;
+    // rarer badge => higher multiplier (a badge 90% of the league has is
+    // worth much less to a player's identity than one only 10% earn)
+    const mult = rate === null ? 1 : Math.min(3, 1 / Math.max(0.08, rate));
+    weighted += b.tier * mult;
+  }
+  return { points: pts, weighted: Math.round(weighted * 10) / 10 };
+}
+
 function calcBadges(conv) {
   const hIn = Math.max(BADGE_H_MIN, Math.min(BADGE_H_MAX, conv.heightIn));
   return BADGES.map(b => {
-    const eligible = hIn >= b.h[0] - 1 && hIn <= b.h[1] + 1;
-    // any:true → alternative requirements (best attribute counts, e.g. Deadeye
-    // works off Midrange OR 3PT); otherwise all attributes must qualify (weakest link)
+    const eligible = hIn >= b.h[0] - BADGE_H_TOL && hIn <= b.h[1] + BADGE_H_TOL;
+    // any:true → the badge has ALTERNATIVE requirements: it fires off whichever
+    // attribute is highest (Deadeye works off Midrange OR 3PT). Without it the
+    // badge needs EVERY listed attribute and is capped by the weakest one
+    // (Posterizer needs both Driving Dunk and Vertical).
+    // Note two different real mechanics share this flag: genuine either/or
+    // badges, and "best of two equivalent stats" badges like Boxout Beast.
     let tier = b.any ? 0 : 5;
+    let near = null;
     for (const a of b.attrs) {
       const t = attrTier(conv.k2[a.stat], a.t);
       tier = b.any ? Math.max(tier, t) : Math.min(tier, t);
     }
-    if (!eligible) tier = 0;
-    return { name: b.name, cat: b.cat, tier, tierName: TIERS[tier], eligible,
-      detail: b.attrs.map(a => `${a.stat} ${Math.round(conv.k2[a.stat])}`).join(", ") };
+    // report the smallest distance to the next tier across the paths that
+    // actually gate this badge
+    for (const a of b.attrs) {
+      const g = nextTierGap(conv.k2[a.stat], a.t);
+      if (g && g.tier > tier && (!near || g.need < near.need)) near = g;
+    }
+    if (!eligible) { tier = 0; near = null; }
+    return {
+      name: b.name, cat: b.cat, tier, tierName: TIERS[tier], eligible,
+      desc: BADGE_DESC[b.name] || "",
+      capNote: BADGE_CAP_NOTE[b.name] || "",
+      near: near ? { tierName: TIERS[near.tier], need: Math.ceil(near.need) } : null,
+      detail: b.attrs.map(a => `${a.stat} ${Math.round(conv.k2[a.stat])}`).join(", "),
+    };
   });
 }
 
 function badgeClass(tier) {
   return tier >= 3 ? "s-good" : tier >= 1 ? "s-ok" : "s-bad";
 }
+const TIER_CHIP = ["chip-none", "chip-bronze", "chip-silver", "chip-gold", "chip-hof", "chip-legend"];
 
 // ---------- Single-player UI ----------
 const inputsDiv = document.getElementById("inputs");
@@ -560,6 +888,21 @@ function fillInputs(bbgm) {
 
 topNSel.addEventListener("change", () => localStorage.setItem(LS_TOPN_KEY, topNSel.value));
 
+const varietySel = document.getElementById("variety");
+const jitterSel = document.getElementById("jitter");
+const LS_VARIETY_KEY = "bbgm2k:variety", LS_JITTER_KEY = "bbgm2k:jitter";
+(function initOpts() {
+  const v = localStorage.getItem(LS_VARIETY_KEY); if (v !== null) varietySel.value = v;
+  const j = localStorage.getItem(LS_JITTER_KEY); if (j !== null) jitterSel.value = j;
+  JITTER_ENABLED = jitterSel.value === "1";
+})();
+varietySel.addEventListener("change", () => localStorage.setItem(LS_VARIETY_KEY, varietySel.value));
+jitterSel.addEventListener("change", () => {
+  JITTER_ENABLED = jitterSel.value === "1";
+  localStorage.setItem(LS_JITTER_KEY, jitterSel.value);
+});
+function getVariety() { return parseFloat(varietySel.value) || 0; }
+
 document.getElementById("pasteRow").addEventListener("input", e => {
   const need = BBGM_STATS.length;
   const hint = document.getElementById("pasteHint");
@@ -619,31 +962,80 @@ document.getElementById("btnCalc").addEventListener("click", () => {
   if (result.bestPen >= 15) {
     html += `<div class="hint">No 2K build is really built this low — the closest shape is shown below, but expect large skill gaps.</div>`;
   }
+  html += `<div class="hint">Estimated playing weight: ~${result.playerLb} lb (derived from height and strength — BBGM has no weight rating; used as a soft matching signal against each build's weight range).</div>`;
+
+  // Primary / secondary identity: reporting a pair multiplies the effective
+  // identity space well beyond the 1,256 builds in the database.
+  if (matches.length >= 2) {
+    html += `<div class="hint">Hybrid identity: <strong>${esc(matches[0].name)} / ${esc(matches[1].name)}</strong></div>`;
+  }
   html += `<div class="match">`;
   matches.forEach((m, i) => {
     const gaps = m.gaps.length
       ? `<div class="hint">Skill gaps: ${esc(m.gaps.join(", "))}</div>`
       : `<div class="hint s-good">No significant skill gaps</div>`;
+    const why = m.contrib && m.contrib.length
+      ? `<div class="hint">Penalty came from: ${esc(m.contrib.map(c => `${c.stat} ${c.share}%`).join(", "))}</div>`
+      : "";
+    const kind = m.maxGap >= 20
+      ? `<div class="hint s-bad">Structural mismatch — biggest shortfall is ${m.maxGap} pts</div>`
+      : m.maxGap >= GAP_MIN
+        ? `<div class="hint s-ok">Fixable — biggest shortfall is ${m.maxGap} pts</div>`
+        : `<div class="hint s-good">Player fits this build's ranges</div>`;
+    const rarity = LEAGUE_RATES && LEAGUE_RATES.archetypes && LEAGUE_RATES.archetypes[m.name] !== undefined
+      ? `<div class="hint">${(100 * LEAGUE_RATES.archetypes[m.name]).toFixed(1)}% of your uploaded league matches this build</div>` : "";
     html += `<div class="match-card"><div class="rank">#${i+1} match</div>
-      <div class="name">${esc(m.name)}</div>
-      <div class="meta">${esc(m.pos)} · ${esc(m.height)}</div>
-      <div class="score ${scoreClass(m.score)}">${m.score}% fit — ${scoreLabel(m.score)}</div>${gaps}</div>`;
+      <div class="name">${esc(m.display)}</div>
+      <div class="meta">${esc(m.pos)} · ${esc(m.height)}${m.weight ? ` · ${esc(m.weight)} lb` : ""}</div>
+      <div class="score ${scoreClass(m.score)}">${m.score}% fit — ${scoreLabel(m.score)}</div>${kind}${gaps}${why}${rarity}</div>`;
   });
-  html += `</div><details style="margin-top:.75rem"><summary>Converted 2K ratings</summary><div class="scroll"><table><thead><tr>` +
-    ARCHETYPE_DATA.statNames.map(s => `<th>${esc(s)}</th>`).join("") + `</tr></thead><tbody><tr>` +
-    ARCHETYPE_DATA.statNames.map(s => `<td>${Math.round(conv.k2[s])}</td>`).join("") + `</tr></tbody></table></div></details>`;
+  html += `</div>`;
+
+  // Converted ratings as percentile-shaded tiles rather than a bare row of 21 numbers
+  html += `<details open style="margin-top:.75rem"><summary>Converted 2K ratings</summary><div class="stat-tiles">` +
+    ARCHETYPE_DATA.statNames.map(s => {
+      const v = Math.round(conv.k2[s]);
+      const p = Math.max(0, Math.min(100, conv.blendPctl[s]));
+      return `<div class="tile"><div class="k">${esc(s)}</div><div class="v">${v}</div>` +
+             `<div class="bar"><span style="width:${p.toFixed(0)}%"></span></div>` +
+             `<div class="k">${Math.round(p)}th pctile</div></div>`;
+    }).join("") + `</div></details>`;
 
   const badges = calcBadges(conv);
-  const earned = badges.filter(b => b.tier > 0).sort((a, b2) => b2.tier - a.tier);
-  html += `<details open style="margin-top:.75rem"><summary>2K Badges (${earned.length} earned)</summary><div class="scroll"><table><thead><tr>` +
-    `<th>Badge</th><th>Category</th><th>Level</th><th>Basis</th></tr></thead><tbody>`;
-  for (const b of badges.sort((a, b2) => b2.tier - a.tier)) {
-    html += `<tr><td>${esc(b.name)}</td><td>${esc(b.cat)}</td>` +
-      `<td class="score ${badgeClass(b.tier)}">${b.eligible ? esc(b.tierName) : "N/A (height)"}</td>` +
-      `<td class="hint">${esc(b.detail)}</td></tr>`;
+  const rates = (LEAGUE_RATES && LEAGUE_RATES.badges) || BADGE_BASE_RATE;
+  const pts = badgePoints(badges, rates);
+  const earned = badges.filter(b => b.tier > 0);
+  const CATS = ["Shooting", "Playmaking", "Finishing", "Defense", "Rebounding", "General"];
+  html += `<details open style="margin-top:.75rem"><summary>2K Badges — ${earned.length} earned, ` +
+    `${pts.points} badge points (${pts.weighted} rarity-weighted)</summary>` +
+    `<div class="hint">Rarity-weighted points discount badges most of the league already has, so the number reflects what actually makes this player distinctive.</div>` +
+    `<label style="margin-top:.5rem"><input type="checkbox" id="showAllBadges"> Show badges not earned</label>` +
+    `<div class="scroll"><table><thead><tr>` +
+    `<th>Badge</th><th>Level</th><th>League</th><th>What it does</th><th>Basis</th></tr></thead><tbody>`;
+  for (const cat of CATS) {
+    const inCat = badges.filter(b => b.cat === cat).sort((a, b2) => b2.tier - a.tier);
+    if (!inCat.length) continue;
+    const gotCat = inCat.filter(b => b.tier > 0).length;
+    html += `<tr class="cat-head"><td colspan="5">${esc(cat)} — ${gotCat}/${inCat.length}</td></tr>`;
+    for (const b of inCat) {
+      const near = b.near ? ` <span class="hint">(${b.near.need} from ${esc(b.near.tierName)})</span>` : "";
+      const rate = rates[b.name] !== undefined ? `${Math.round(100 * rates[b.name])}%` : "—";
+      html += `<tr class="badge-row${b.tier > 0 ? "" : " badge-unearned"}"${b.tier > 0 ? "" : ' style="display:none"'}>` +
+        `<td>${esc(b.name)}</td>` +
+        `<td><span class="chip ${TIER_CHIP[b.tier]}">${b.eligible ? esc(b.tierName) : "N/A (height)"}</span>${near}</td>` +
+        `<td class="hint">${rate}</td>` +
+        `<td class="hint">${esc(b.desc)}${b.capNote ? " " + esc(b.capNote) : ""}</td>` +
+        `<td class="hint">${esc(b.detail)}</td></tr>`;
+    }
   }
   html += `</tbody></table></div></details>`;
   out.innerHTML = html;
+  const toggle = document.getElementById("showAllBadges");
+  if (toggle) toggle.addEventListener("change", e => {
+    out.querySelectorAll(".badge-unearned").forEach(tr => {
+      tr.style.display = e.target.checked ? "" : "none";
+    });
+  });
 });
 
 document.getElementById("btnSample").addEventListener("click", () => {
@@ -680,7 +1072,27 @@ const HEADER_ALIASES = {
   oiq:"OIQ", diq:"DIQ", drb:"Drb", pss:"Pss", reb:"Reb",
 };
 
-function parseCSV(text) {
+// European Excel writes semicolon-delimited CSV by default; tab-separated
+// exports are common too. Sniff the delimiter from the header line rather
+// than assuming a comma and producing one giant unsplit column.
+function sniffDelimiter(text) {
+  const firstLine = text.replace(/^﻿/, "").split(/\r?\n/, 1)[0] || "";
+  let best = ",", bestN = 0;
+  for (const d of [",", ";", "\t", "|"]) {
+    // count only delimiters outside quoted sections
+    let n = 0, inQ = false;
+    for (let i = 0; i < firstLine.length; i++) {
+      const c = firstLine[i];
+      if (c === '"') inQ = !inQ;
+      else if (c === d && !inQ) n++;
+    }
+    if (n > bestN) { bestN = n; best = d; }
+  }
+  return best;
+}
+
+function parseCSV(text, delim) {
+  const d = delim || sniffDelimiter(text);
   const rows = [];
   let row = [], field = "", inQ = false;
   text = text.replace(/^﻿/, "");
@@ -690,7 +1102,7 @@ function parseCSV(text) {
       if (c === '"') { if (text[i+1] === '"') { field += '"'; i++; } else inQ = false; }
       else field += c;
     } else if (c === '"') inQ = true;
-    else if (c === ",") { row.push(field); field = ""; }
+    else if (c === d) { row.push(field); field = ""; }
     else if (c === "\n" || c === "\r") {
       if (c === "\r" && text[i+1] === "\n") i++;
       row.push(field); field = "";
@@ -703,8 +1115,41 @@ function parseCSV(text) {
   return rows;
 }
 
+// BBGM's native league export is JSON, and it's the format most users
+// actually have on hand. It carries real heights in inches, true positions
+// and ages, so we use those directly instead of round-tripping through the
+// ratings-CSV approximation.
+function parseBBGMJson(text) {
+  let data;
+  try { data = JSON.parse(text); } catch { return null; }
+  if (!data || !Array.isArray(data.players)) return null;
+  const out = [];
+  for (const p of data.players) {
+    const r = Array.isArray(p.ratings) ? p.ratings[p.ratings.length - 1] : p.ratings;
+    if (!r) continue;
+    const bbgm = {
+      Hgt: r.hgt, Stre: r.stre, Spd: r.spd, Jmp: r.jmp, Endu: r.endu,
+      Ins: r.ins, Dnk: r.dnk, FT: r.ft, Mid: r.fg !== undefined ? r.fg : r.mid,
+      TP: r.tp, OIQ: r.oiq, DIQ: r.diq, Drb: r.drb, Pss: r.pss, Reb: r.reb,
+    };
+    if (BBGM_STATS.some(s => typeof bbgm[s] !== "number" || isNaN(bbgm[s]))) continue;
+    const name = p.firstName || p.lastName
+      ? `${p.firstName || ""} ${p.lastName || ""}`.trim()
+      : (p.name || "Unnamed");
+    out.push({
+      name, pos: (r.pos || p.pos || ""), bbgm,
+      // BBGM stores a true height in inches; prefer it over the Hgt-rating map
+      realHeightIn: typeof p.hgt === "number" ? p.hgt : undefined,
+      age: typeof p.born === "object" && data.gameAttributes
+        ? undefined : (typeof p.age === "number" ? p.age : undefined),
+    });
+  }
+  return out.length ? out : null;
+}
+
 let batchResults = null;   // full unfiltered/unsorted results for the last run
 let batchSkipped = 0;
+let batchNotes = [];
 let batchSort = { key: null, dir: 1 };
 let batchPage = 0;
 const BATCH_PAGE_SIZE = 50;
@@ -727,6 +1172,7 @@ function getFilteredSortedBatch() {
       if (key === "name") { av = a.name.toLowerCase(); bv = b.name.toLowerCase(); }
       else if (key === "pos") { av = a.pos.toLowerCase(); bv = b.pos.toLowerCase(); }
       else if (key === "bestPen") { av = a.bestPen; bv = b.bestPen; }
+      else if (key === "badgePts") { av = a.badgePts ? a.badgePts.weighted : -1; bv = b.badgePts ? b.badgePts.weighted : -1; }
       else { av = a.matches[0] ? a.matches[0].score : -1; bv = b.matches[0] ? b.matches[0].score : -1; }
       return av < bv ? -dir : av > bv ? dir : 0;
     });
@@ -744,11 +1190,13 @@ function renderBatchTable() {
   const arrow = key => batchSort.key === key ? (batchSort.dir === 1 ? "▲" : "▼") : "";
 
   let html = `<div class="hint" style="margin-top:.75rem">${batchResults.length} player${batchResults.length === 1 ? "" : "s"} converted${batchSkipped ? `, ${batchSkipped} row${batchSkipped === 1 ? "" : "s"} skipped (missing/invalid ratings)` : ""}${filtered.length !== batchResults.length ? ` — ${filtered.length} shown after filter` : ""}.</div>`;
-  html += `<div class="hint">"Fit gap" is the #1 match's raw penalty (lower = closer to a real build) and is comparable across players; "%" ranks builds against each other for that one player only. Click a column header to sort.</div>`;
+  batchNotes.forEach(nte => { html += `<div class="hint">${esc(nte)}</div>`; });
+  html += `<div class="hint">"Fit gap" is the #1 match's raw penalty (lower = closer to a real build) and is comparable across players; "%" ranks builds against each other for that one player only. "Badge pts" is rarity-weighted. Click a column header to sort.</div>`;
   html += `<table style="margin-top:.5rem"><thead><tr>` +
     `<th class="sortable" data-key="name">Player <span class="arrow">${arrow("name")}</span></th>` +
     `<th class="sortable" data-key="pos">Pos <span class="arrow">${arrow("pos")}</span></th>` +
-    `<th class="sortable" data-key="bestPen">Fit gap <span class="arrow">${arrow("bestPen")}</span></th>`;
+    `<th class="sortable" data-key="bestPen">Fit gap <span class="arrow">${arrow("bestPen")}</span></th>` +
+    `<th class="sortable" data-key="badgePts">Badge pts <span class="arrow">${arrow("badgePts")}</span></th>`;
   for (let i = 0; i < topN; i++) {
     html += `<th>${i === 0 ? "Best archetype" : `#${i + 1}`}</th>`;
     html += i === 0
@@ -757,11 +1205,12 @@ function renderBatchTable() {
   }
   html += `</tr></thead><tbody>`;
   for (const p of pageItems) {
-    html += `<tr><td>${esc(p.name)}</td><td>${esc(p.pos)}</td><td>${p.bestPen.toFixed(1)}</td>`;
+    html += `<tr><td>${esc(p.name)}</td><td>${esc(p.pos)}</td><td>${p.bestPen.toFixed(1)}</td>` +
+      `<td>${p.badgePts ? p.badgePts.weighted : "—"}</td>`;
     for (let i = 0; i < topN; i++) {
       const m = p.matches[i];
       html += m
-        ? `<td>${esc(m.name)} <span class="hint">(${esc(m.pos)})</span></td><td class="score ${scoreClass(m.score)}" title="${scoreLabel(m.score)}">${m.score}</td>`
+        ? `<td>${esc(m.display || m.name)} <span class="hint">(${esc(m.pos)})</span></td><td class="score ${scoreClass(m.score)}" title="${scoreLabel(m.score)}">${m.score}</td>`
         : `<td></td><td></td>`;
     }
     html += `</tr>`;
@@ -793,6 +1242,102 @@ function renderBatchTable() {
 
 document.getElementById("batchSearch").addEventListener("input", () => { batchPage = 0; renderBatchTable(); });
 
+// ---------- League / team dashboard ----------
+// The batch pass already computes converted ratings, badges and full rankings
+// for every player and used to throw all of it away after printing three
+// names. This is the natural home for that data.
+function renderLeagueDashboard() {
+  const el = document.getElementById("leagueDash");
+  if (!batchResults || !batchResults.length) { el.innerHTML = ""; return; }
+  const n = batchResults.length;
+
+  const archCount = new Map();
+  const posCount = new Map();
+  const teamRoles = new Map();
+  let badgePtsTotal = 0;
+  for (const p of batchResults) {
+    const m = p.matches[0];
+    if (m) {
+      archCount.set(m.display || m.name, (archCount.get(m.display || m.name) || 0) + 1);
+      posCount.set(m.pos, (posCount.get(m.pos) || 0) + 1);
+    }
+    badgePtsTotal += p.badgePts ? p.badgePts.points : 0;
+  }
+  const distinct = archCount.size;
+  const sortedArch = [...archCount.entries()].sort((a, b) => b[1] - a[1]);
+  const topShare = sortedArch.length ? 100 * sortedArch[0][1] / n : 0;
+
+  const bar = (label, count, max) =>
+    `<tr><td>${esc(label)}</td><td style="width:55%"><div class="bar" style="height:10px">` +
+    `<span style="width:${max ? (100 * count / max).toFixed(1) : 0}%"></span></div></td>` +
+    `<td>${count} <span class="hint">(${(100 * count / n).toFixed(1)}%)</span></td></tr>`;
+
+  const maxArch = sortedArch.length ? sortedArch[0][1] : 1;
+  const POS_ORDER = ["PG", "SG", "SF", "PF", "C"];
+  const maxPos = Math.max(1, ...POS_ORDER.map(p => posCount.get(p) || 0));
+
+  // Roster-construction gaps: which archetype families are missing entirely.
+  const FAMILIES = [
+    ["Shot creation", /shot creator|iso|sniper|scorer|shooter/i],
+    ["Rim pressure", /slasher|dunker|high flyer|rim|finisher|posterizer/i],
+    ["Playmaking", /playmak|dimer|floor general|passer|visionary|orchestrat/i],
+    ["Interior defence", /lock|paint|anchor|rim protect|enforcer|glass|board/i],
+    ["Perimeter defence", /clamp|perimeter|pest|stopper|defender|3&d|two-way|2-way/i],
+  ];
+  const famCount = FAMILIES.map(([label, re]) => {
+    let c = 0;
+    for (const [name, k] of archCount) if (re.test(name)) c += k;
+    return [label, c];
+  });
+
+  let html = `<h2 style="margin-top:0">League overview</h2>`;
+  html += `<div class="stat-tiles">` +
+    `<div class="tile"><div class="k">Players</div><div class="v">${n}</div></div>` +
+    `<div class="tile"><div class="k">Distinct archetypes</div><div class="v">${distinct}</div></div>` +
+    `<div class="tile"><div class="k">Most common share</div><div class="v">${topShare.toFixed(1)}%</div></div>` +
+    `<div class="tile"><div class="k">Avg badge points</div><div class="v">${(badgePtsTotal / n).toFixed(1)}</div></div>` +
+    `</div>`;
+
+  html += `<details open style="margin-top:.75rem"><summary>Archetype distribution (top 15)</summary>` +
+    `<div class="scroll"><table><tbody>` +
+    sortedArch.slice(0, 15).map(([k, v]) => bar(k, v, maxArch)).join("") +
+    `</tbody></table></div></details>`;
+
+  html += `<details style="margin-top:.5rem"><summary>Positional balance (of matched builds)</summary>` +
+    `<div class="scroll"><table><tbody>` +
+    POS_ORDER.map(p => bar(p, posCount.get(p) || 0, maxPos)).join("") +
+    `</tbody></table></div>` +
+    `<div class="hint">This is the position of each player's matched <em>build</em>, not their BBGM position — the matcher does not use position, so treat a mismatch as information about the build catalogue, not an error.</div>` +
+    `</details>`;
+
+  const maxFam = Math.max(1, ...famCount.map(f => f[1]));
+  html += `<details style="margin-top:.5rem"><summary>Roster construction</summary>` +
+    `<div class="scroll"><table><tbody>` +
+    famCount.map(([k, v]) => bar(k, v, maxFam)).join("") +
+    `</tbody></table></div>`;
+  const thin = famCount.filter(([, v]) => v / n < 0.08).map(([k]) => k);
+  html += thin.length
+    ? `<div class="hint s-ok">Thin on: ${esc(thin.join(", "))}.</div>`
+    : `<div class="hint s-good">Every archetype family is represented.</div>`;
+  html += `</details>`;
+
+  // badge strength heatmap by category
+  const CATS = ["Shooting", "Playmaking", "Finishing", "Defense", "Rebounding", "General"];
+  const catTotals = Object.fromEntries(CATS.map(c => [c, 0]));
+  for (const p of batchResults) {
+    (p.badges || []).forEach(b => { if (b.tier > 0) catTotals[b.cat] += b.tier; });
+  }
+  const maxCat = Math.max(1, ...CATS.map(c => catTotals[c]));
+  html += `<details style="margin-top:.5rem"><summary>Badge strength by category</summary>` +
+    `<div class="scroll"><table><tbody>` +
+    CATS.map(c => `<tr><td>${esc(c)}</td><td style="width:55%"><div class="bar" style="height:10px">` +
+      `<span style="width:${(100 * catTotals[c] / maxCat).toFixed(1)}%"></span></div></td>` +
+      `<td>${(catTotals[c] / n).toFixed(1)} <span class="hint">pts/player</span></td></tr>`).join("") +
+    `</tbody></table></div></details>`;
+
+  el.innerHTML = html;
+}
+
 // Processes CSV text in chunks with a yield back to the UI thread between
 // each one, so a large roster (hundreds+ of players x 1,256 builds) shows
 // progress and keeps the page responsive instead of freezing it.
@@ -808,72 +1353,189 @@ async function runBatch(text) {
   progress.style.display = "none";
   progressText.textContent = "";
 
-  const rows = parseCSV(text);
-  if (rows.length < 2) { showBatchErr("CSV appears to be empty."); return; }
+  // A BBGM league JSON export is the format most users actually have, so
+  // accept it directly rather than demanding a ratings CSV.
+  const asJson = text.trim().startsWith("{") ? parseBBGMJson(text) : null;
 
-  const header = rows[0].map(h => h.trim());
-  const colFor = {};   // BBGM stat -> column index
-  let nameCol = -1, posCol = -1;
-  header.forEach((h, i) => {
-    const k = h.toLowerCase();
-    if (k === "name") nameCol = i;
-    else if (k === "pos") posCol = i;
-    else if (HEADER_ALIASES[k] && colFor[HEADER_ALIASES[k]] === undefined) colFor[HEADER_ALIASES[k]] = i;
-  });
-  const missing = BBGM_STATS.filter(s => colFor[s] === undefined);
-  if (missing.length) { showBatchErr("Missing columns: " + missing.join(", ")); return; }
+  let players = [];
+  let skipped = 0;
+  let notes = [];
 
-  const total = rows.length - 1;
+  if (asJson) {
+    players = asJson;
+    notes.push(`Read ${players.length} players from a BBGM league JSON export.`);
+  } else {
+    const delim = sniffDelimiter(text);
+    const rows = parseCSV(text, delim);
+    if (rows.length < 2) {
+      showBatchErr(rows.length === 0
+        ? "That input is empty."
+        : "Found a header row but no data rows. Expected a BBGM ratings CSV " +
+          "(a header line plus one line per player) or a BBGM league JSON export.");
+      return;
+    }
+    if (delim !== ",") {
+      notes.push(`Detected "${delim === "\t" ? "tab" : delim}" as the column separator.`);
+    }
+
+    const header = rows[0].map(h => h.trim());
+    const colFor = {};   // BBGM stat -> column index
+    const dupes = [];
+    let nameCol = -1, posCol = -1;
+    header.forEach((h, i) => {
+      const k = h.toLowerCase();
+      if (k === "name") { if (nameCol < 0) nameCol = i; }
+      else if (k === "pos") { if (posCol < 0) posCol = i; }
+      else if (HEADER_ALIASES[k]) {
+        const stat = HEADER_ALIASES[k];
+        // Silently keeping the first of two recognised headers hides a real
+        // ambiguity (e.g. both "2Pt" and "Mid" present); say so.
+        if (colFor[stat] === undefined) colFor[stat] = i;
+        else dupes.push(`${h} (already mapped ${stat})`);
+      }
+    });
+    const missing = BBGM_STATS.filter(s => colFor[s] === undefined);
+    if (missing.length) { showBatchErr("Missing columns: " + missing.join(", ")); return; }
+    if (dupes.length) {
+      notes.push(`Duplicate recognised headers ignored: ${dupes.join(", ")}. The leftmost column won.`);
+    }
+
+    for (let r = 1; r < rows.length; r++) {
+      const bbgm = {};
+      let bad = false;
+      for (const s of BBGM_STATS) {
+        const v = parseFloat(rows[r][colFor[s]]);
+        // Same 0-100 range check the single-player form enforces — an
+        // out-of-range value (e.g. a malformed export) is skipped rather than
+        // silently producing a garbage row.
+        if (isNaN(v) || v < 0 || v > 100) { bad = true; break; }
+        bbgm[s] = v;
+      }
+      if (bad) { skipped++; continue; }
+      const rawName = nameCol >= 0 ? rows[r][nameCol] : undefined;
+      players.push({
+        name: rawName ? rawName : `Row ${r}`,
+        pos: posCol >= 0 && rows[r][posCol] ? rows[r][posCol] : "",
+        bbgm,
+      });
+    }
+  }
+
+  const total = players.length;
+  if (!total) { showBatchErr("No valid rating rows found."); return; }
   if (total > BATCH_CHUNK) progress.style.display = "block";
 
-  const results = [];
-  let skipped = 0;
+  // Ask for a deeper candidate list than we display so the variety pass has
+  // real alternatives to choose between.
   const topN = getTopN();
-  for (let r = 1; r < rows.length; r++) {
-    const bbgm = {};
-    let bad = false;
-    for (const s of BBGM_STATS) {
-      const v = parseFloat(rows[r][colFor[s]]);
-      // Same 0-100 range check the single-player form enforces — an
-      // out-of-range value (e.g. a malformed export) is skipped rather than
-      // silently producing a garbage row.
-      if (isNaN(v) || v < 0 || v > 100) { bad = true; break; }
-      bbgm[s] = v;
-    }
-    if (bad) { skipped++; continue; }
-    const r2 = matchArchetypes(convertPlayer(bbgm), topN);
-    const rawName = nameCol >= 0 ? rows[r][nameCol] : undefined;
-    results.push({
-      name: rawName ? rawName : `Row ${r}`,
-      pos: posCol >= 0 && rows[r][posCol] ? rows[r][posCol] : "",
-      matches: r2.matches,
-      bestPen: r2.bestPen,
-    });
-    if (r % BATCH_CHUNK === 0) {
-      progressBar.style.width = Math.round((r / total) * 100) + "%";
-      progressText.textContent = `Processing ${r.toLocaleString()} / ${total.toLocaleString()}...`;
+  const variety = getVariety();
+  const candN = variety > 0 ? Math.max(Number.isFinite(topN) ? topN : 10, 30) : topN;
+
+  const rows2 = [];
+  for (let i = 0; i < players.length; i++) {
+    const p = players[i];
+    const conv = convertPlayer(p.bbgm);
+    if (p.realHeightIn !== undefined) conv.heightIn = p.realHeightIn;
+    const r2 = matchArchetypes(conv, candN);
+    rows2.push({ name: p.name, pos: p.pos, conv, ranked: r2.matches, bestPen: r2.bestPen });
+    if (i % BATCH_CHUNK === 0 && i) {
+      progressBar.style.width = Math.round((i / total) * 100) + "%";
+      progressText.textContent = `Processing ${i.toLocaleString()} / ${total.toLocaleString()}...`;
       await new Promise(res => setTimeout(res, 0));
     }
   }
+
+  // Diversity-penalised assignment: without it a whole league piles into a
+  // handful of catch-all builds. strength 0 reproduces pure best-fit.
+  const chosen = assignWithVariety(rows2.map(r => r.ranked), variety);
+  const results = rows2.map((r, i) => {
+    const primary = chosen[i] || r.ranked[0];
+    // keep the player's own ranking for the extra columns, but put the
+    // variety-assigned build first
+    const rest = r.ranked.filter(m => m.name !== (primary && primary.name));
+    const shown = primary ? [primary, ...rest] : rest;
+    return {
+      name: r.name, pos: r.pos, conv: r.conv, bestPen: r.bestPen,
+      matches: shown.slice(0, Number.isFinite(topN) ? topN : shown.length),
+    };
+  });
+
   progress.style.display = "none";
   progressText.textContent = "";
 
-  if (!results.length) { showBatchErr("No valid rating rows found."); return; }
+  // League-wide frequencies, so a match can say how common it actually is.
+  const archCount = new Map();
+  results.forEach(p => { if (p.matches[0]) archCount.set(p.matches[0].name, (archCount.get(p.matches[0].name) || 0) + 1); });
+  const badgeCount = new Map();
+  results.forEach(p => {
+    p.badges = calcBadges(p.conv);
+    p.badges.forEach(b => { if (b.tier > 0) badgeCount.set(b.name, (badgeCount.get(b.name) || 0) + 1); });
+  });
+  LEAGUE_RATES = {
+    archetypes: Object.fromEntries([...archCount].map(([k, v]) => [k, v / results.length])),
+    badges: Object.fromEntries(BADGES.map(b => [b.name, (badgeCount.get(b.name) || 0) / results.length])),
+  };
+  results.forEach(p => { p.badgePts = badgePoints(p.badges, LEAGUE_RATES.badges); });
 
   batchResults = results;
   batchSkipped = skipped;
+  batchNotes = notes;
   batchSort = { key: null, dir: 1 };
   batchPage = 0;
   document.getElementById("batchSearch").value = "";
   document.getElementById("batchSearchWrap").style.display = results.length > 10 ? "block" : "none";
   renderBatchTable();
+  renderLeagueDashboard();
   document.getElementById("btnDownload").style.display = "inline-block";
+}
+
+// 10 MB ceiling: past this the browser is being asked to hold a very large
+// string plus every derived result, and the likeliest cause is the wrong file.
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+
+// Reading and parsing a user-supplied file can throw for perfectly ordinary
+// reasons (a binary dropped on the input, an undecodable encoding, a file
+// that vanished). Surface that instead of letting it reach the console.
+async function runBatchFromFile(file) {
+  if (!file) return;
+  if (file.size > MAX_UPLOAD_BYTES) {
+    showBatchErr(`That file is ${(file.size / 1024 / 1024).toFixed(1)} MB — the limit is ` +
+      `${MAX_UPLOAD_BYTES / 1024 / 1024} MB. Is it definitely a ratings export?`);
+    return;
+  }
+  let text;
+  try {
+    text = await file.text();
+  } catch (err) {
+    showBatchErr("Couldn't read that file. If it's a spreadsheet or an archive, " +
+      "export it as CSV first.");
+    return;
+  }
+  // A binary file decodes to mostly replacement characters / control bytes.
+  const sample = text.slice(0, 2000);
+  const weird = (sample.match(/[\u0000-\u0008\u000e-\u001f\ufffd]/g) || []).length;
+  if (weird > sample.length * 0.02) {
+    showBatchErr("That doesn't look like text — it may be a binary file (.xlsx, .zip, an image). " +
+      "Export your ratings as CSV, or paste the CSV text instead.");
+    return;
+  }
+  await runBatchSafe(text);
+}
+
+async function runBatchSafe(text) {
+  try {
+    await runBatch(text);
+  } catch (err) {
+    console.error(err);
+    showBatchErr("Couldn't parse that file: " + (err && err.message ? err.message : "unexpected format") +
+      ". Expected a BBGM ratings CSV or a BBGM league JSON export.");
+  }
 }
 
 document.getElementById("csvFile").addEventListener("change", async e => {
   const file = e.target.files[0];
   if (!file) return;
-  await runBatch(await file.text());
+  await runBatchFromFile(file);
   // Reset so re-selecting the same file (e.g. after fixing it and re-exporting
   // under the same name) fires 'change' again instead of going silent.
   e.target.value = "";
@@ -889,13 +1551,13 @@ const dropzone = document.getElementById("dropzone");
 dropzone.addEventListener("drop", async e => {
   const file = e.dataTransfer.files && e.dataTransfer.files[0];
   if (!file) return;
-  await runBatch(await file.text());
+  await runBatchFromFile(file);
 });
 
 document.getElementById("btnParsePaste").addEventListener("click", async () => {
   const text = document.getElementById("csvPaste").value;
   if (!text.trim()) { showBatchErr("Paste some CSV text first."); return; }
-  await runBatch(text);
+  await runBatchSafe(text);
 });
 
 document.getElementById("btnSampleRoster").addEventListener("click", async () => {
@@ -904,7 +1566,7 @@ document.getElementById("btnSampleRoster").addEventListener("click", async () =>
     // Pages publishes only the docs/ folder, per this repo's own setup steps.
     const res = await fetch("PlayerRatings_sample.csv");
     if (!res.ok) throw new Error(String(res.status));
-    await runBatch(await res.text());
+    await runBatchSafe(await res.text());
   } catch {
     showBatchErr("Couldn't load the sample roster (docs/PlayerRatings_sample.csv). " +
       "If you opened this page directly from disk (a file:// URL), your browser may " +
@@ -916,15 +1578,29 @@ document.getElementById("btnDownload").addEventListener("click", () => {
   if (!batchResults || !batchResults.length) return;
   const q = s => `"${String(s).replace(/"/g, '""')}"`;
   const maxN = Math.max(...batchResults.map(p => p.matches.length));
-  let header = "Name,Pos,FitGap";
+  // Carry the derived data the batch pass already computed — converted 2K
+  // ratings, badge totals and fit quality — instead of exporting three names
+  // and throwing the rest away.
+  const statNames = ARCHETYPE_DATA.statNames;
+  let header = "Name,Pos,FitGap,FitLabel,BadgesEarned,BadgePoints,BadgePointsWeighted,EstWeightLb";
   for (let i = 0; i < maxN; i++) header += `,Archetype${i + 1},Pos${i + 1},Score${i + 1}`;
+  header += "," + statNames.map(s => q(s)).join(",");
   let csv = header + "\n";
   for (const p of batchResults) {
-    const cells = [q(p.name), q(p.pos), p.bestPen];
+    const m0 = p.matches[0];
+    const cells = [
+      q(p.name), q(p.pos), p.bestPen,
+      q(m0 ? scoreLabel(m0.score) : ""),
+      p.badges ? p.badges.filter(b => b.tier > 0).length : "",
+      p.badgePts ? p.badgePts.points : "",
+      p.badgePts ? p.badgePts.weighted : "",
+      p.conv ? Math.round(estimateWeightLb(p.conv.heightIn, p.conv.pctl.Stre)) : "",
+    ];
     for (let i = 0; i < maxN; i++) {
       const m = p.matches[i];
-      cells.push(m ? q(m.name) : "", m ? q(m.pos) : "", m ? m.score : "");
+      cells.push(m ? q(m.display || m.name) : "", m ? q(m.pos) : "", m ? m.score : "");
     }
+    for (const s of statNames) cells.push(p.conv ? Math.round(p.conv.k2[s]) : "");
     csv += cells.join(",") + "\n";
   }
   const a = document.createElement("a");
