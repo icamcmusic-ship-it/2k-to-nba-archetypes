@@ -1,0 +1,2 @@
+# Pinned dependency for tools/extract_archetypes.py (see `make regen`).
+openpyxl==3.1.5
