@@ -205,7 +205,7 @@
             <option value="">All</option>
             <option value="ok">Clean match only</option>
             <option value="relaxed">Relaxed match</option>
-            <option value="none">No legal build</option>
+            <option value="unbuildable">No build qualifies</option>
           </select>
         </div>
         <div>
@@ -251,8 +251,9 @@
       <summary>Methodology</summary>
       <p><strong>1. BBGM → percentile.</strong> Each rating becomes a percentile within a reference distribution — the modern NBA by default, or the uploaded roster itself in "this league" mode. An exponential curve stretches both the top and bottom 10% so elite (and truly poor) ratings stay elite (or poor) after translation.</p>
       <p><strong>2. Percentile → 2K rating.</strong> The percentile maps onto 2K's own rating distribution for that stat. Each 2K stat blends the BBGM inputs that actually drive it rather than copying one: Interior Defense is dIQ + Strength + height, Block is dIQ + Jmp + height, Driving Dunk is Dnk + Jmp + Spd, Defensive Rebound is Reb + height, and so on. Height feeds ratings here, not just the build filter, so a 7'2" and a 6'2" player with identical dIQ no longer convert to identical rim protection. <code>Endu</code> isn't modeled by any 2K attribute — it's shown as a separate conditioning note instead of being silently ignored.</p>
-      <p><strong>3. Matching.</strong> Both the player and every build's min/max range are expressed in <em>percentiles</em>, so a point means the same thing in every stat and the declared per-stat weights actually control influence. A player inside a build's range costs nothing; falling short of a minimum is penalized quadratically; exceeding a maximum costs a third as much. On top of that, a <em>shape</em> term penalizes builds whose strength/weakness pattern doesn't look like the player's — without it only deficits bind, so the cheapest builds in the database win for everybody. Any build demanding a skill 40+ percentile points beyond the player is disqualified; if nothing survives even a relaxed gate, the results are still shown but flagged "no legal build" rather than silently presented as a clean match. Builds whose height range doesn't fit (±1") are excluded, relaxing to nearest-height builds rather than the whole database.</p>
-      <p><strong>4. Fit grade.</strong> The headline number is a calibrated grade derived from the raw penalty (Excellent / Good / Loose / Poor / No real build), anchored on the penalty distribution of a real 966-player league. It replaces the old "% fit", which was a percentile rank of the build inside the player's own pool and was therefore 100.0 for 97% of players by construction. The build's rank within the eligible pool is still shown, as a secondary line.</p>
+      <p><strong>3. Matching.</strong> Both the player and every build's min/max range are expressed in <em>percentiles</em>, so a point means the same thing in every stat and the declared per-stat weights actually control influence. A player inside a build's range costs nothing; falling short of a minimum is penalized quadratically; exceeding a maximum costs a third as much. On top of that, a <em>shape</em> term penalizes builds whose strength/weakness pattern doesn't look like the player's — without it only deficits bind, so the cheapest builds in the database win for everybody. Any build demanding a skill 40+ percentile points beyond the player is disqualified. Builds whose height range doesn't fit (±1") are excluded, relaxing to nearest-height builds rather than the whole database.</p>
+      <p><strong>3b. Key attributes.</strong> Every build has <em>key attributes</em>: the stats it demands at the 70th percentile or better — the ones it's actually built around (capped at its five most demanding). Falling more than 15 percentile points short of any of them disqualifies the build outright, <em>including in the fallback</em>. Without that last part the veto did nothing: it refused the build, and the cascade underneath handed the player the same build anyway. Each match shows what it's built around and exactly how far short the player is, and a build whose key attribute the player misses can never grade better than "Loose fit". When nothing qualifies, that's reported as its own outcome — the closest shapes are still listed, as "what he'd be if he developed", not "what he is". On a typical BBGM league roughly half the players qualify for no build at all; that's an honest fact about the league, since 2K's database describes MyPlayer creations with elite attributes and a rotation player isn't one.</p>
+      <p><strong>4. Fit grade.</strong> The headline number is a calibrated grade derived from the raw penalty (Excellent / Good / Loose / Poor / No real build). Cut points are per mode — the same penalty means different things graded against the NBA and against a weaker league, and one shared table put three quarters of a league at "Good fit" or better in league mode — and when a whole roster is loaded the grade is a percentile against that roster's own penalty distribution instead. A build the player misses a key attribute on is capped at "Loose fit" whatever its penalty. The build's rank within the eligible pool is still shown, as a secondary line.</p>
       <p><strong>5. Badges.</strong> Converted ratings and height run through 2K's real badge thresholds (<span id="badgeVer2"></span>), Bronze → Legend, gated by each badge's height range.</p>
     </details>
   </div>
@@ -265,7 +266,8 @@
         <li>59% of the database's stat entries have min = max; those are widened by ±2 before matching so they aren't dramatically harsher than genuinely banded stats.</li>
         <li>Free Throw drives no 2K badge, so its conversion only affects archetype matching.</li>
         <li>Wingspan and weight/body type aren't modeled — BBGM has no equivalent input, and Strength is only a rough proxy for the latter.</li>
-        <li>Badge thresholds come from a single game version; 2K changes them year to year.</li>
+        <li>Badge thresholds come from a single game version; 2K changes them year to year. Badge earn rates are also uneven across categories (Shooting is the cheapest), and 14 of 40 badges still can't reach Legend because their Legend thresholds sit above the top of their stat's anchor curve.</li>
+        <li>Reverse mode (build → BBGM ratings) is a least-squares inverse, but 21 2K stats are built from 15 BBGM ones, so builds that pull shared inputs in opposite directions (high Block, low Interior Defense) aren't representable at all. Feeding a build's own profile back in recovers it into the top 3 about half the time; a perfect nearest-profile oracle manages ~60%, so the rest is information loss in the ratings model, not a matching error. Endurance has no 2K source and is filled in at league average.</li>
       </ul>
     </details>
   </div>
@@ -339,9 +341,13 @@ function weightScale() {
   return any ? out : null;
 }
 function convOpts() { return calibSel.value === "league" && leagueAnchors ? { anchors: leagueAnchors } : {}; }
-function matchOpts(pos) {
-  const o = { weightScale: weightScale() };
+// Set once a batch has been scored: grading a roster against its own penalty
+// distribution beats any fixed table. See runPlayers().
+let batchGrader = null;
+function matchOpts(pos, useBatchGrader) {
+  const o = { weightScale: weightScale(), calib: calibSel.value === "league" && leagueAnchors ? "league" : "nba" };
   if (posSel.value === "soft" && pos) o.pos = pos;
+  if (useBatchGrader && batchGrader) o.grader = batchGrader;
   return o;
 }
 function applyHeightScale() {
@@ -471,7 +477,7 @@ function resultHtml(bbgm, conv, result, opts) {
   const hIn = Math.round(conv.heightIn);
   let html = "";
   if (result.quality !== "ok") {
-    html += `<div class="banner ${result.quality === "none" ? "bad" : ""}">${esc(result.qualityNote)}</div>`;
+    html += `<div class="banner ${result.quality === "unbuildable" ? "bad" : ""}">${esc(result.qualityNote)}</div>`;
   }
   html += `<div class="hint" style="margin-top:.75rem">Converted height: ~${Math.floor(hIn / 12)}'${hIn % 12}"` +
     ` · Conditioning: ${Math.round(conv.enduPctl)}th percentile endurance (not modeled by any 2K attribute — it sustains minutes rather than raising any rating).</div>`;
@@ -490,12 +496,18 @@ function resultHtml(bbgm, conv, result, opts) {
       ? `<div class="hint">Weak at: ${esc(m.gaps.join(", "))}</div>`
       : `<div class="hint s-good">No significant skill gaps</div>`;
     const strong = m.strengths.length ? `<div class="hint">Chosen for: ${esc(m.strengths.join(", "))}</div>` : "";
+    // The mirror of "chosen for", and the more important half: what this build is
+    // built around that the player hasn't got.
+    const keyLine = m.keyShort.length
+      ? `<div class="hint ${m.keyOk ? "s-ok" : "s-bad"}">Built around ${esc(m.keyShort.join("; "))}` +
+        (m.keyOk ? "" : ` — too far short of a defining skill for this to be a real match`) + `</div>`
+      : `<div class="hint s-good">Clears every attribute this build is built around</div>`;
     html += `<div class="match-card"><div class="rank">#${i + 1} match</div>
       <div class="name">${esc(m.name)}</div>
       <div class="meta">${esc(m.pos)} · ${esc(m.height)}</div>
       <div class="score ${m.grade.cls}">${esc(m.grade.label)} — gap ${m.gapPts.toFixed(1)}</div>
       <div class="hint">#${m.rank} of ${result.poolSize} eligible builds</div>
-      ${strong}${gaps}
+      ${strong}${keyLine}${gaps}
       <details><summary>Why?</summary>${fitChart(E.matchDetail(conv, m.ai))}</details></div>`;
   });
   html += `</div>`;
@@ -668,6 +680,7 @@ function computeOne(p) {
     name: p.name, pos: p.pos, team: p.team, ovr: p.ovr, pot: p.pot, age: p.age,
     bbgm: p.bbgm, matches: r.matches, bestPen: r.bestPen, grade: r.grade,
     quality: r.quality, tieCount: r.tieCount, heightClamped: r.heightClamped,
+    buildable: r.buildable, qualifying: r.qualifying, bestKeyGap: r.bestKeyGap,
     badgePoints: E.calcBadges(conv).reduce((a, b) => a + b.points, 0),
     k2: conv.k2,
   };
@@ -723,6 +736,15 @@ async function runPlayers(players, skips, dupes) {
   progress.style.display = "none";
   txt.textContent = "";
 
+  // Second pass: re-grade every player against this roster's own penalty
+  // distribution. The fixed cut points are calibrated per mode, but a real batch
+  // is better evidence than either table.
+  batchGrader = E.makeGrader(results.map(r => r.bestPen));
+  for (const r of results) {
+    r.grade = batchGrader(r.bestPen, r.bestKeyGap);
+    for (const m of r.matches) m.grade = batchGrader(m.gapPts, m.keyGap);
+  }
+
   batchResults = results;
   batchSkips = skips || [];
   batchSort = { key: null, dir: 1 };
@@ -740,8 +762,27 @@ async function runPlayers(players, skips, dupes) {
   if (dupes && dupes.length) notes.push(`Duplicate rating columns ignored: ${esc(dupes.join(", "))}.`);
   const clamped = results.filter(r => r.heightClamped).length;
   if (clamped) notes.push(`${clamped} player(s) fall outside the build database's height range and were matched at the nearest supported height.`);
+  if (leagueAnchors) {
+    // deriveAnchors() forces flat distributions apart to stay invertible; a stat
+    // that needed several bumps has largely invented percentiles.
+    const adj = E.anchorAdjustments(leagueAnchors);
+    const shaky = Object.entries(adj).filter(([, n]) => n > 1);
+    if (Object.keys(adj).length) {
+      notes.push(`League percentiles: ${esc(Object.entries(adj).map(([st, n]) => `${st} (${n})`).join(", "))} had tied values that had to be forced apart` +
+        (shaky.length ? ` — ${esc(shaky.map(([st]) => st).join(", "))} needed more than one bump, so those percentiles aren't trustworthy for this league.` : "."));
+    }
+    // If the roster clearly isn't NBA-shaped, say so instead of quietly grading
+    // it against the NBA and flagging a fifth of it as unbuildable.
+    const div = E.anchorDivergence(leagueAnchors);
+    if (calibSel.value !== "league" && div >= 3) {
+      notes.push(`This roster's rating distribution sits ${div.toFixed(1)} rating points away from the NBA's on average. ` +
+        `<button class="secondary" id="btnUseLeague">Grade against this league instead</button>`);
+    }
+  }
   warn.innerHTML = notes.join("<br>");
   warn.style.display = notes.length ? "block" : "none";
+  const useLeague = document.getElementById("btnUseLeague");
+  if (useLeague) useLeague.addEventListener("click", () => { calibSel.value = "league"; rerunAll(); });
 
   const posSelEl = document.getElementById("batchPos");
   const positions = [...new Set(results.map(r => r.pos).filter(Boolean))].sort();
@@ -790,7 +831,7 @@ function renderBatch() {
   renderBatchTable();
 }
 
-const QUALITY_LABEL = { ok: "Clean", relaxed: "Relaxed", none: "No legal build" };
+const QUALITY_LABEL = { ok: "Buildable", relaxed: "Buildable (relaxed)", unbuildable: "Unbuildable" };
 
 function renderBatchTable() {
   const out = document.getElementById("batchOut");
@@ -804,7 +845,10 @@ function renderBatchTable() {
   document.getElementById("batchSummary").innerHTML =
     `${batchResults.length} player(s) converted${filtered.length !== batchResults.length ? `, ${filtered.length} shown` : ""}. ` +
     diversityLine(filtered) +
-    ` Graded against ${calibSel.value === "league" ? "this league" : "the NBA"}.`;
+    ` Graded against ${calibSel.value === "league" ? "this league" : "the NBA"}.` +
+    ` ${batchResults.filter(p => !p.buildable).length} of ${batchResults.length} ` +
+    `(${Math.round(100 * batchResults.filter(p => !p.buildable).length / batchResults.length)}%) qualify for no 2K build at all — ` +
+    `every build in their height range is built around a skill they're well short of.`;
 
   if (!filtered.length) {
     out.innerHTML = `<div class="hint" style="margin-top:.75rem">No players match the current filters.</div>`;
@@ -819,18 +863,18 @@ function renderBatchTable() {
   let html = `<div class="hint">Click a row for the full breakdown. "Fit gap" is the raw penalty of the #1 match and is comparable across players.</div>`;
   html += `<div class="sticky-table" style="margin-top:.5rem"><table><thead><tr>` +
     th("name", "Player") + th("pos", "Pos") + th("team", "Team") +
-    th("bestPen", "Fit gap") + `<th>Fit</th><th>Quality</th>` + th("badgePoints", "Badge pts");
+    th("bestPen", "Fit gap") + `<th>Fit</th><th>Buildable</th>` + th("badgePoints", "Badge pts");
   if (!compact) html += th("ovr", "Ovr") + th("pot", "Pot");
   for (let i = 0; i < topN; i++) html += i === 0 ? th("arch", "Best archetype") : `<th>#${i + 1}</th>`;
   if (!compact) html += `<th>Peak projection</th>`;
   html += `</tr></thead><tbody>`;
   for (const p of pageItems) {
     const idx = batchResults.indexOf(p);
-    html += `<tr class="clickable${p.quality === "none" ? " warn" : ""}" data-i="${idx}" tabindex="0">` +
+    html += `<tr class="clickable${p.quality === "unbuildable" ? " warn" : ""}" data-i="${idx}" tabindex="0">` +
       `<td>${esc(p.name)}</td><td>${esc(p.pos)}</td><td>${esc(p.team || "")}</td>` +
       `<td>${p.bestPen.toFixed(1)}</td>` +
       `<td class="score ${p.grade.cls}">${esc(p.grade.label)}</td>` +
-      `<td class="${p.quality === "none" ? "s-bad" : p.quality === "relaxed" ? "s-ok" : "s-good"}">${QUALITY_LABEL[p.quality]}</td>` +
+      `<td class="${p.quality === "unbuildable" ? "s-bad" : p.quality === "relaxed" ? "s-ok" : "s-good"}">${QUALITY_LABEL[p.quality]}</td>` +
       `<td>${p.badgePoints}</td>`;
     if (!compact) html += `<td>${p.ovr == null ? "" : p.ovr}</td><td>${p.pot == null ? "" : p.pot}</td>`;
     for (let i = 0; i < topN; i++) {
@@ -917,7 +961,7 @@ const drawer = document.getElementById("drawer");
 function openDrawer(p) {
   if (!p) return;
   const conv = E.convertPlayer(p.bbgm, convOpts());
-  const result = E.matchArchetypes(conv, Math.max(3, Number.isFinite(getTopN()) ? getTopN() : 5), matchOpts(p.pos));
+  const result = E.matchArchetypes(conv, Math.max(3, Number.isFinite(getTopN()) ? getTopN() : 5), matchOpts(p.pos, true));
   let extra = "";
   if (p.peak) extra = `<div class="hint">Peak projection (from Ovr ${p.ovr} → Pot ${p.pot}): <strong>${esc(p.peak)}</strong></div>`;
   document.getElementById("drawerBody").innerHTML =
@@ -982,16 +1026,16 @@ document.getElementById("btnDownload").addEventListener("click", () => {
   const q = s => `"${String(s == null ? "" : s).replace(/"/g, '""')}"`;
   const maxN = Math.max(...batchResults.map(p => p.matches.length));
   const statCols = E.STAT_NAMES;
-  let header = ["Name", "Pos", "Team", "Age", "Ovr", "Pot", "FitGap", "FitGrade", "FitQuality", "TiedBuilds", "BadgePoints", "PeakArchetype"];
-  for (let i = 0; i < maxN; i++) header.push(`Archetype${i + 1}`, `Pos${i + 1}`, `Gap${i + 1}`, `Grade${i + 1}`, `TopGaps${i + 1}`);
+  let header = ["Name", "Pos", "Team", "Age", "Ovr", "Pot", "FitGap", "FitGrade", "FitQuality", "Buildable", "QualifyingBuilds", "TiedBuilds", "BadgePoints", "PeakArchetype"];
+  for (let i = 0; i < maxN; i++) header.push(`Archetype${i + 1}`, `Pos${i + 1}`, `Gap${i + 1}`, `Grade${i + 1}`, `KeyShortfall${i + 1}`, `TopGaps${i + 1}`);
   header = header.concat(statCols.map(s => "2K " + s));
   let csv = header.join(",") + "\n";
   for (const p of batchResults) {
     const cells = [q(p.name), q(p.pos), q(p.team), p.age ?? "", p.ovr ?? "", p.pot ?? "",
-      p.bestPen, q(p.grade.label), q(QUALITY_LABEL[p.quality]), p.tieCount, p.badgePoints, q(p.peak || "")];
+      p.bestPen, q(p.grade.label), q(QUALITY_LABEL[p.quality]), p.buildable ? "yes" : "no", p.qualifying, p.tieCount, p.badgePoints, q(p.peak || "")];
     for (let i = 0; i < maxN; i++) {
       const m = p.matches[i];
-      cells.push(m ? q(m.name) : "", m ? q(m.pos) : "", m ? m.gapPts : "", m ? q(m.grade.label) : "", m ? q(m.gaps.join("; ")) : "");
+      cells.push(m ? q(m.name) : "", m ? q(m.pos) : "", m ? m.gapPts : "", m ? q(m.grade.label) : "", m ? q(m.keyShort.join("; ")) : "", m ? q(m.gaps.join("; ")) : "");
     }
     for (const s of statCols) cells.push(Math.round(p.k2[s]));
     csv += cells.join(",") + "\n";
@@ -1039,12 +1083,14 @@ document.getElementById("btnDownload").addEventListener("click", () => {
     if (!isNaN(tpMax)) list = list.filter(x => x.a.stats[tpIdx][0] <= tpMax);
     const out = document.getElementById("abOut");
     let html = `<div class="hint" style="margin-top:.5rem">${list.length} of ${E.ARCHETYPES.length} builds match.</div>`;
-    html += `<div class="sticky-table" style="margin-top:.5rem"><table><thead><tr><th>Build</th><th>Pos</th><th>Height</th><th>3PT min</th><th>Equivalent BBGM player</th></tr></thead><tbody>`;
+    html += `<div class="sticky-table" style="margin-top:.5rem"><table><thead><tr><th>Build</th><th>Pos</th><th>Height</th><th>3PT min</th><th>Built around</th><th>Equivalent BBGM player</th></tr></thead><tbody>`;
     for (const { a, i } of list.slice(0, 300)) {
       const b = E.archetypeToBBGM(i);
       const bbgmStr = ["Hgt","Stre","Spd","Ins","Dnk","Mid","TP","DIQ","Drb","Pss","Reb"].map(s => `${s} ${b[s]}`).join(" · ");
+      const key = E.keyAttributes(i).map(k => `${k.stat} ${k.needK2}`).join(" · ");
       html += `<tr><td>${esc(a.name)}</td><td>${esc(a.pos)}</td><td>${esc(E.fmtHeight(a.hMin, a.hMax))}</td>` +
-        `<td>${a.stats[tpIdx][0]}</td><td class="hint" style="white-space:normal">${esc(bbgmStr)}</td></tr>`;
+        `<td>${a.stats[tpIdx][0]}</td><td class="hint" style="white-space:normal">${esc(key)}</td>` +
+        `<td class="hint" style="white-space:normal">${esc(bbgmStr)}</td></tr>`;
     }
     html += `</tbody></table></div>`;
     if (list.length > 300) html += `<div class="hint">Showing the first 300 — narrow the filters to see the rest.</div>`;

@@ -172,7 +172,7 @@ function convertPlayer(bbgm, opts) {
 // NBA-shaped (weaker, wider, historical, expansion) can be graded against
 // itself instead of against the NBA.
 function deriveAnchors(players) {
-  const out = {};
+  const out = {}, adjusted = {};
   for (const s of BBGM_STATS) {
     const vals = players.map(p => p[s]).filter(v => typeof v === "number" && !isNaN(v)).sort((a, b) => a - b);
     if (vals.length < 20) return null;   // too small a sample to be meaningful
@@ -181,12 +181,37 @@ function deriveAnchors(players) {
       const lo = Math.floor(idx), hi = Math.ceil(idx);
       return Math.round((vals[lo] + (vals[hi] - vals[lo]) * (idx - lo)) * 10) / 10;
     });
-    // anchors must be strictly increasing for interp() to invert cleanly
+    // anchors must be strictly increasing for interp() to invert cleanly. This
+    // fabricates spread where a league genuinely has none (lots of players
+    // sharing one value), so the adjustments are counted rather than made
+    // silently: a stat that needed several of them has percentiles that aren't
+    // trustworthy for this league.
+    let bumped = 0;
     for (let i = 1; i < out[s].length; i++) {
-      if (out[s][i] <= out[s][i - 1]) out[s][i] = out[s][i - 1] + 0.1;
+      if (out[s][i] <= out[s][i - 1]) { out[s][i] = out[s][i - 1] + 0.1; bumped++; }
     }
+    if (bumped) adjusted[s] = bumped;
   }
+  Object.defineProperty(out, ANCHOR_NOTES, { value: adjusted, enumerable: false });
   return out;
+}
+
+// Which stats deriveAnchors() had to force apart, and by how many anchors.
+// >2 means that stat's league percentiles are largely invented.
+const ANCHOR_NOTES = "__anchorAdjustments";
+function anchorAdjustments(anchorSet) { return (anchorSet && anchorSet[ANCHOR_NOTES]) || {}; }
+
+// How far a derived anchor set sits from the NBA one, in BBGM rating points
+// averaged over every stat and percentile. Used to nudge the user towards
+// league-relative grading when their roster clearly isn't NBA-shaped.
+function anchorDivergence(anchorSet) {
+  if (!anchorSet) return 0;
+  let sum = 0, n = 0;
+  for (const s of BBGM_STATS) {
+    if (!anchorSet[s]) continue;
+    for (let i = 0; i < PCTL.length; i++) { sum += Math.abs(anchorSet[s][i] - NBA_ANCHORS[s][i]); n++; }
+  }
+  return n ? sum / n : 0;
 }
 
 // ---------- Matching ----------
@@ -203,6 +228,9 @@ const SHAPE_W = 18;          // weight of the profile-shape term (see below)
 const HEIGHT_W = 2.5;        // penalty points per inch outside the build's height range
 const GAP_MIN = 10;          // deficit size worth flagging to the user
 const HARD_GAP = 40;         // any single deficit this large disqualifies the build
+const KEY_PCTL = 70;        // a build's "key" attributes: the ones it demands at the 70th percentile or better
+const KEY_MAX = 5;          // at most this many, taking the build's most demanding stats
+const KEY_GAP = 15;         // falling this far short of a key attribute disqualifies the build outright
 const HARD_GAP_RELAXED = 60; // fallback threshold if too few builds survive
 const FALLBACK_POOL = 25;    // builds kept when even the relaxed gate finds nothing
 const MIN_BAND = 2;          // 59% of DB entries are min==max; give them a little air
@@ -223,6 +251,13 @@ const B_HI = new Float32Array(NA * NS);
 const B_MID = new Float32Array(NA * NS);
 const B_SHAPE = new Float32Array(NA * NS);   // mean-centred, unit-norm midpoints
 const B_SHAPE_OK = new Uint8Array(NA);
+// Key attributes per build: the stats it is actually built around. Treating all
+// 21 stats identically let a player be handed a build named for a skill he was a
+// third of the league's distribution short of, with no warning at all -- the only
+// disqualifier was HARD_GAP on the single worst deficit anywhere in the profile,
+// which doesn't care whether that deficit lands on the build's defining stat or
+// on one it barely uses.
+const KEY = new Array(NA);
 (function buildMatrix() {
   for (let ai = 0; ai < NA; ai++) {
     const a = ARCH.archetypes[ai];
@@ -244,26 +279,79 @@ const B_SHAPE_OK = new Uint8Array(NA);
     norm = Math.sqrt(norm);
     B_SHAPE_OK[ai] = norm > 1e-6 ? 1 : 0;
     if (norm > 1e-6) for (let i = 0; i < NS; i++) B_SHAPE[ai * NS + i] /= norm;
+
+    const demanding = [];
+    for (let i = 0; i < NS; i++) if (B_LO[ai * NS + i] >= KEY_PCTL) demanding.push(i);
+    demanding.sort((x, y) => B_LO[ai * NS + y] - B_LO[ai * NS + x]);
+    // every build in the database demands *something*; if one somehow doesn't,
+    // fall back to its single most demanding stat so KEY is never empty
+    if (!demanding.length) {
+      let best = 0;
+      for (let i = 1; i < NS; i++) if (B_LO[ai * NS + i] > B_LO[ai * NS + best]) best = i;
+      demanding.push(best);
+    }
+    KEY[ai] = Int32Array.from(demanding.slice(0, KEY_MAX));
   }
 })();
+
+// The stats a build is built around, in percentile terms, for display.
+function keyAttributes(ai) {
+  return Array.from(KEY[ai]).map(i => ({
+    stat: STAT_NAMES[i], need: B_LO[ai * NS + i], needK2: Math.round(percentileTo2K(STAT_NAMES[i], B_LO[ai * NS + i])),
+  }));
+}
 
 // Calibrated against a real 966-player BBGM league: these cut points are the
 // ~20th/50th/75th/90th percentiles of the #1 match's raw penalty. The number
 // they replace -- a percentile rank of the build within the player's own pool
 // -- was 100.0 for 97% of players by construction (the best build has zero
 // builds better than it), so it carried no information at all.
-function fitGrade(pen) {
-  if (pen <= 8) return { pct: 95, label: "Excellent fit", cls: "s-good" };
-  if (pen <= 20) return { pct: 80, label: "Good fit", cls: "s-good" };
-  if (pen <= 35) return { pct: 60, label: "Loose fit", cls: "s-ok" };
-  if (pen <= 55) return { pct: 35, label: "Poor fit", cls: "s-bad" };
-  return { pct: 10, label: "No real build matches this player", cls: "s-bad" };
+const GRADE_TIERS = [
+  { pct: 95, label: "Excellent fit", cls: "s-good" },
+  { pct: 80, label: "Good fit", cls: "s-good" },
+  { pct: 60, label: "Loose fit", cls: "s-ok" },
+  { pct: 35, label: "Poor fit", cls: "s-bad" },
+  { pct: 10, label: "No real build matches this player", cls: "s-bad" },
+];
+const LOOSE_TIER = 2;   // index of "Loose fit"
+
+// Cut points are mode-specific: the same penalty means different things when a
+// player is graded against the NBA and against his own (weaker) league. One
+// shared table -- calibrated in NBA mode -- put three quarters of a league at
+// "Good fit" or better in league mode, where the median penalty is less than
+// half the NBA-mode median. Each row is the ~20th/50th/75th/90th percentile of
+// the #1 match's raw penalty over the 974-player sample roster in that mode.
+const GRADE_CUTS = {
+  nba: [11, 33, 54, 76],
+  league: [6, 14, 30, 47],
+};
+
+function gradeFrom(cuts, pen, keyGap) {
+  let i = cuts.findIndex(c => pen <= c);
+  if (i < 0) i = cuts.length;
+  // A build the player is well short of on its *defining* stat cannot be a good
+  // fit, whatever the aggregate penalty says.
+  if (keyGap > KEY_GAP && i < LOOSE_TIER) i = LOOSE_TIER;
+  return GRADE_TIERS[i];
+}
+
+function fitGrade(pen, keyGap) { return gradeFrom(GRADE_CUTS.nba, pen, keyGap || 0); }
+
+// Grade against the penalty distribution of an actual batch, which beats any
+// fixed table when a whole roster is available.
+function makeGrader(penalties) {
+  const xs = penalties.filter(v => typeof v === "number" && !isNaN(v)).sort((a, b) => a - b);
+  if (xs.length < 30) return fitGrade;
+  const at = q => xs[Math.min(xs.length - 1, Math.floor(q / 100 * (xs.length - 1)))];
+  const cuts = [at(20), at(50), at(75), at(90)];
+  for (let i = 1; i < cuts.length; i++) if (cuts[i] <= cuts[i - 1]) cuts[i] = cuts[i - 1] + 0.1;
+  return (pen, keyGap) => gradeFrom(cuts, pen, keyGap || 0);
 }
 
 const QUALITY_NOTE = {
   ok: "",
   relaxed: "Nothing fit cleanly — these are the closest builds after relaxing the skill-gap limit.",
-  none: "No 2K build exists for this rating profile. The closest shapes are shown, but this player can't really be built in 2K.",
+  unbuildable: "No 2K build fits this player. Every build in his height range is built around at least one skill he's well short of. The closest shapes are shown below with the specific shortfall on each — treat them as “what he'd be if he developed”, not “what he is”.",
 };
 
 function matchArchetypes(conv, topN, opts) {
@@ -271,7 +359,9 @@ function matchArchetypes(conv, topN, opts) {
   opts = opts || {};
   const shapeW = opts.shapeW == null ? SHAPE_W : opts.shapeW;
   const posBias = opts.pos ? String(opts.pos).toUpperCase() : null;   // soft, opt-in
-  const POS_PENALTY = 6;
+  const grade = typeof opts.grader === "function" ? opts.grader
+    : opts.calib === "league" ? (pen, kg) => gradeFrom(GRADE_CUTS.league, pen, kg || 0)
+    : fitGrade;
 
   // signature boost: a stat at/above the 85th percentile OR at/below the 15th
   // gets 1.5x weight -- builds must feature the player's elite skills AND avoid
@@ -305,7 +395,7 @@ function matchArchetypes(conv, topN, opts) {
       const a = ARCH.archetypes[ai];
       const base = ai * NS;
       let pen = 0, maxGap = 0, shapeDot = 0;
-      const gaps = [], strengths = [];
+      const gaps = [], strengths = [], keyShort = [];
       for (let i = 0; i < NS; i++) {
         const lo = B_LO[base + i], hi = B_HI[base + i], v = userVec[i];
         const deficit = lo - v;
@@ -317,10 +407,21 @@ function matchArchetypes(conv, topN, opts) {
         } else if (v > hi) {
           pen += weights[i] * (v - hi) * SURPLUS_SCALE;
         }
-        // a stat where the build is demanding (top-third requirement) and the
-        // player comfortably clears it is *why* this build won
-        if (deficit <= 0 && lo >= 65) strengths.push({ stat: STAT_NAMES[i], need: lo, have: v });
         if (uShapeOk && B_SHAPE_OK[ai]) shapeDot += uShape[i] * B_SHAPE[base + i];
+      }
+      // Key attributes: the stats this build is built around. Falling short on
+      // one of them is disqualifying (see the filter cascade below) and is
+      // reported explicitly, rather than being averaged away by 20 stats the
+      // build doesn't care about.
+      let keyGap = 0;
+      for (const i of KEY[ai]) {
+        const lo = B_LO[base + i], v = userVec[i], d = lo - v;
+        if (d > keyGap) keyGap = d;
+        if (d > 0) keyShort.push({ stat: STAT_NAMES[i], need: lo, have: v, short: d });
+        // "Chosen for" names the build's own identity: a key attribute the
+        // player clears, not any stat over the 65th percentile (which is a
+        // below-average 2K requirement and made the explanation feel padded).
+        else strengths.push({ stat: STAT_NAMES[i], need: lo, have: v });
       }
       pen /= totalW;
       // shape term: does the player's strength/weakness *pattern* look like this
@@ -328,10 +429,19 @@ function matchArchetypes(conv, topN, opts) {
       // database win for everyone -- 4 archetypes covered half of a real league.
       if (uShapeOk && B_SHAPE_OK[ai]) pen += shapeW * (1 - shapeDot) / 2;
       pen += HEIGHT_W * (hIn < a.hMin ? a.hMin - hIn : hIn > a.hMax ? hIn - a.hMax : 0);
-      if (posBias && a.pos !== posBias) pen += POS_PENALTY;
       gaps.sort((x, y) => y.short - x.short);
       strengths.sort((x, y) => y.need - x.need);
-      out.push({ ai, a, pen, maxGap, gaps: gaps.slice(0, 3), strengths: strengths.slice(0, 3) });
+      keyShort.sort((x, y) => y.short - x.short);
+      out.push({ ai, a, pen, maxGap, keyGap, keyShort: keyShort.slice(0, 3), gaps: gaps.slice(0, 3), strengths: strengths.slice(0, 3) });
+    }
+    // Off-position nudge, scaled to this pool's own penalty spread. A flat 6
+    // points was decisive against penalties near zero and pure noise against
+    // penalties near 120.
+    if (posBias) {
+      const sorted = out.map(x => x.pen).sort((a, b) => a - b);
+      const at = q => sorted[Math.min(sorted.length - 1, Math.floor(q / 100 * (sorted.length - 1)))];
+      const posPen = Math.max(2, Math.min(15, (at(90) - at(10)) * 0.15));
+      for (const x of out) if (x.a.pos !== posBias) x.pen += posPen;
     }
     // deterministic tie-break: shape first, then name, so equal-penalty builds
     // don't just resolve by database order (which is why the same handful of
@@ -361,17 +471,32 @@ function matchArchetypes(conv, topN, opts) {
   const scored = score(poolIdx);
   // Never remove the sanity check silently: 20% of a real league fell through
   // to an unfiltered whole-database match and was then shown as a 100% fit.
-  let final = scored.filter(x => x.maxGap <= HARD_GAP);
-  let quality = "ok";
-  if (final.length < minWanted) {
-    final = scored.filter(x => x.maxGap <= HARD_GAP_RELAXED);
-    quality = "relaxed";
+  // The key-attribute veto applies at EVERY level, fallback included. Dropping it
+  // in the fallback is what defeated it: the veto correctly refused the build,
+  // and the cascade underneath then handed the player the same build anyway.
+  //
+  // One qualifying build is enough to be buildable -- the gate is on whether a
+  // legitimate match exists, not on whether there are topN of them.
+  const clean = scored.filter(x => x.keyGap <= KEY_GAP && x.maxGap <= HARD_GAP);
+  let final, quality;
+  if (clean.length) { final = clean; quality = "ok"; }
+  else {
+    const relaxed = scored.filter(x => x.keyGap <= KEY_GAP && x.maxGap <= HARD_GAP_RELAXED);
+    if (relaxed.length) { final = relaxed; quality = "relaxed"; }
+    else {
+      // Nothing qualifies. Say so, and rank the closest shapes by how far short
+      // of a defining skill they leave the player -- not by how cheap they are.
+      final = scored.slice().sort((a, b) => (a.keyGap - b.keyGap) || (a.pen - b.pen)).slice(0, Math.max(FALLBACK_POOL, minWanted));
+      quality = "unbuildable";
+    }
   }
-  if (final.length < minWanted) {
-    // rank the fallback by how far off it is, not by how cheap it is -- ranking
-    // by penalty here prefers builds that are cheap-but-wrong over close-but-demanding
-    final = scored.slice().sort((a, b) => (a.maxGap - b.maxGap) || (a.pen - b.pen)).slice(0, Math.max(FALLBACK_POOL, minWanted));
-    quality = "none";
+  if (quality !== "unbuildable" && final.length < minWanted) {
+    // Pad the list with the nearest refused builds so there are still
+    // alternatives to look at. They keep their keyGap, so the UI shows exactly
+    // what each one is short of and their grade is capped accordingly.
+    const seen = new Set(final.map(x => x.ai));
+    const extra = scored.filter(x => !seen.has(x.ai)).sort((a, b) => (a.keyGap - b.keyGap) || (a.pen - b.pen));
+    final = final.concat(extra.slice(0, minWanted - final.length));
   }
 
   const bestPen = final.length ? final[0].pen : (scored.length ? scored[0].pen : 0);
@@ -379,20 +504,30 @@ function matchArchetypes(conv, topN, opts) {
   // often the top pick is arbitrary
   const tieCount = final.filter(x => x.pen <= bestPen + TIE_BAND).length;
 
+  const bestKeyGap = final.length ? final[0].keyGap : 0;
+
   return {
     heightClamped, heightUsedIn: hIn, heightPoolRelaxed,
     quality, qualityNote: QUALITY_NOTE[quality],
     poolSize: scored.length,
+    buildable: quality !== "unbuildable",
+    qualifying: scored.filter(x => x.keyGap <= KEY_GAP && x.maxGap <= HARD_GAP).length,
     tieCount,
     bestPen: Math.round(bestPen * 10) / 10,
-    grade: fitGrade(bestPen),
-    matches: final.slice(0, topN).map(({ a, ai, pen, maxGap, gaps, strengths }, i) => ({
+    bestKeyGap: Math.round(bestKeyGap * 10) / 10,
+    grade: grade(bestPen, bestKeyGap),
+    matches: final.slice(0, topN).map(({ a, ai, pen, maxGap, keyGap, keyShort, gaps, strengths }, i) => ({
       name: a.name, pos: a.pos, ai,
       height: fmtHeight(a.hMin, a.hMax),
-      grade: fitGrade(pen),
+      grade: grade(pen, keyGap),
       rank: i + 1,
       gapPts: Math.round(pen * 10) / 10,
       maxGap: Math.round(maxGap),
+      keyGap: Math.round(keyGap),
+      keyOk: keyGap <= KEY_GAP,
+      // the mirror of "chosen for": what this build is built around that the
+      // player does not have
+      keyShort: keyShort.map(k => `${k.stat} (needs ${Math.round(k.need)}th pctile, ${Math.round(k.short)} short)`),
       gaps: gaps.map(g => `${g.stat} −${Math.round(g.short)}`),
       strengths: strengths.map(s => `${s.stat} ${Math.round(s.have)} (needs ${Math.round(s.need)})`),
     })),
@@ -440,31 +575,90 @@ function percentileToBBGM(stat, p, anchorSet) {
   return interp(q, PCTL, anchors);
 }
 
-// The BBGM ratings a build's midpoint profile corresponds to. A BBGM stat can
-// feed several 2K stats, so each source is recovered as the weighted average of
-// the percentiles of the 2K stats it drives (weighted by its share of each).
+// The BBGM ratings a build's midpoint profile corresponds to.
+//
+// This is a least-squares inverse of the forward blend, not a per-stat average.
+// The old version recovered each BBGM stat as a share^2-weighted mean of the 2K
+// stats it drives, which is not an inverse of the forward direction: re-blending
+// the result gave a profile up to 40 percentile points off the build on stats
+// several 2K attributes share (Post Control / Standing Dunk / Block / Interior
+// Defense all draw on the same two or three BBGM inputs), and 56% of builds then
+// failed to match themselves. Solving min ||W(Ax - target)||^2 instead makes the
+// forward re-blend as close to the build as the projection allows.
+//
+// Note the ceiling: 21 2K stats are built from 15 BBGM ones, so builds that pull
+// shared inputs in opposite directions (high Block, low Interior Defense) are not
+// representable at all. Even a perfect nearest-profile oracle only recovers ~60%
+// of builds into the top 3 -- that residual is information loss in the ratings
+// model, not a matcher bug.
+const NB = BBGM_STATS.length;
+const BBGM_IDX = Object.fromEntries(BBGM_STATS.map((s, i) => [s, i]));
+// A[k][j] = share of BBGM stat j in 2K stat k
+const BLEND_A = STAT_NAMES.map(s => {
+  const row = new Array(NB).fill(0);
+  for (const [src, share] of K2_FROM_BBGM[s][0]) row[BBGM_IDX[src]] = share;
+  return row;
+});
+const INVERSE_RIDGE = 0.05;   // pulls unconstrained directions towards the 50th percentile
+const INVERSE_DEMAND_W = 0.5; // weight the fit towards the stats the build actually demands
+
+function solveBlend(target) {
+  const M = [], b = [];
+  for (let i = 0; i < NB; i++) {
+    const row = new Array(NB).fill(0);
+    let bi = 0;
+    for (let k = 0; k < NS; k++) {
+      const w = K2_FROM_BBGM[STAT_NAMES[k]][1] * (1 + Math.max(0, target[k] - 50) / 25 * INVERSE_DEMAND_W);
+      const aik = BLEND_A[k][i];
+      if (aik) {
+        for (let j = 0; j < NB; j++) row[j] += w * aik * BLEND_A[k][j];
+        bi += w * aik * target[k];
+      }
+    }
+    row[i] += INVERSE_RIDGE;
+    bi += INVERSE_RIDGE * 50;
+    M.push(row); b.push(bi);
+  }
+  // Gauss-Jordan with partial pivoting; NB is 15, so this is trivial work
+  for (let c = 0; c < NB; c++) {
+    let piv = c;
+    for (let r = c + 1; r < NB; r++) if (Math.abs(M[r][c]) > Math.abs(M[piv][c])) piv = r;
+    [M[c], M[piv]] = [M[piv], M[c]]; [b[c], b[piv]] = [b[piv], b[c]];
+    if (Math.abs(M[c][c]) < 1e-9) continue;
+    for (let r = 0; r < NB; r++) {
+      if (r === c) continue;
+      const f = M[r][c] / M[c][c];
+      if (!f) continue;
+      for (let j = c; j < NB; j++) M[r][j] -= f * M[c][j];
+      b[r] -= f * b[c];
+    }
+  }
+  return b.map((v, i) => (Math.abs(M[i][i]) < 1e-9 ? 50 : v / M[i][i]));
+}
+
 function archetypeToBBGM(ai, anchorSet) {
   const base = ai * NS;
-  const num = {}, den = {};
-  STAT_NAMES.forEach((s, i) => {
-    const [srcs] = K2_FROM_BBGM[s];
-    const p = B_MID[base + i];
-    for (const [src, share] of srcs) {
-      num[src] = (num[src] || 0) + share * share * p;   // weight by share^2: a
-      den[src] = (den[src] || 0) + share * share;       // 0.1-share stat says little
-    }
-  });
+  const target = [];
+  for (let i = 0; i < NS; i++) target.push(B_MID[base + i]);
+  const p = solveBlend(target);
   const out = {};
-  for (const s of BBGM_STATS) {
-    if (!den[s]) continue;
-    out[s] = Math.round(percentileToBBGM(s, num[s] / den[s], anchorSet));
-  }
+  BBGM_STATS.forEach((s, j) => {
+    const v = percentileToBBGM(s, Math.max(0.5, Math.min(99.9, p[j])), anchorSet);
+    out[s] = Math.round(Math.max(0, Math.min(100, v)));
+  });
   const a = ARCH.archetypes[ai];
   // height comes straight from the build's own range, not from any stat
   const mid = (a.hMin + a.hMax) / 2;
   out.Hgt = Math.round(Math.max(0, Math.min(100, (mid - HEIGHT_SCALE.base) / HEIGHT_SCALE.perPoint)));
+  // No 2K attribute feeds endurance, so there is nothing to recover: state the
+  // league-average placeholder rather than leaving a hole in the output.
+  out.Endu = 50;
   return out;
 }
+
+// Which keys of archetypeToBBGM() are recovered from the build and which are
+// filled in because nothing in 2K describes them.
+const REVERSE_PLACEHOLDERS = { Endu: "no 2K attribute models endurance; set to league average" };
 
 // Grouping used by the UI's weight editor and badge/stat tables.
 const STAT_CATEGORIES = {
@@ -519,8 +713,10 @@ return {
   bbgmHeightToInches, setHeightScale, HEIGHT_SCALE,
   convertPlayer, deriveAnchors, matchArchetypes, matchDetail, calcBadges,
   percentileToBBGM, archetypeToBBGM, STAT_CATEGORIES,
+  anchorAdjustments, anchorDivergence, keyAttributes, makeGrader, gradeFrom, GRADE_CUTS,
+  REVERSE_PLACEHOLDERS, QUALITY_NOTE,
   fitGrade, fmtH, fmtHeight,
-  CONSTANTS: { DEFICIT_GRACE, DEFICIT_CURVE, SURPLUS_SCALE, SHAPE_W, HEIGHT_W, HARD_GAP, HARD_GAP_RELAXED, TIE_BAND },
+  CONSTANTS: { DEFICIT_GRACE, DEFICIT_CURVE, SURPLUS_SCALE, SHAPE_W, HEIGHT_W, HARD_GAP, HARD_GAP_RELAXED, TIE_BAND, KEY_PCTL, KEY_MAX, KEY_GAP },
 };
 })();
 if (typeof module !== "undefined" && module.exports) module.exports = BBGM2K;

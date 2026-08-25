@@ -87,8 +87,8 @@
       "Pss": 86,
       "Reb": 60
     },
-    "archetype": "Ankle Taker",
-    "bestPen": 6.2,
+    "archetype": "Iso Sniper",
+    "bestPen": 6.3,
     "quality": "ok"
   },
   {
@@ -110,9 +110,9 @@
       "Pss": 84,
       "Reb": 40
     },
-    "archetype": "2-Way 3PT Slasher",
-    "bestPen": 24.7,
-    "quality": "relaxed"
+    "archetype": "Iso Savant",
+    "bestPen": 28.5,
+    "quality": "unbuildable"
   },
   {
     "name": "Demetrius Hicks",
@@ -133,8 +133,8 @@
       "Pss": 50,
       "Reb": 30
     },
-    "archetype": "2-Way 3PT Slasher",
-    "bestPen": 13.2,
+    "archetype": "2-Way 3PT-Sniping High Flyer",
+    "bestPen": 14.8,
     "quality": "ok"
   },
   {
@@ -156,9 +156,9 @@
       "Pss": 37,
       "Reb": 43
     },
-    "archetype": "Crafty Sharpshooter",
-    "bestPen": 21.5,
-    "quality": "ok"
+    "archetype": "Crafty 3-Level Scorer",
+    "bestPen": 25.5,
+    "quality": "relaxed"
   },
   {
     "name": "Dusan Božović",
@@ -181,7 +181,7 @@
     },
     "archetype": "2-Way High-Flying Slasher",
     "bestPen": 32,
-    "quality": "ok"
+    "quality": "unbuildable"
   },
   {
     "name": "Nicolo Marino",
@@ -225,9 +225,9 @@
       "Pss": 38,
       "Reb": 49
     },
-    "archetype": "Edge-Enforcing Rim Runner",
-    "bestPen": 15.9,
-    "quality": "ok"
+    "archetype": "Rim-Reaping High Flyer",
+    "bestPen": 26.4,
+    "quality": "unbuildable"
   },
   {
     "name": "Ben Williams",
@@ -248,9 +248,9 @@
       "Pss": 43,
       "Reb": 19
     },
-    "archetype": "2-Way Off-Screen Shooter",
-    "bestPen": 25.6,
-    "quality": "relaxed"
+    "archetype": "2-Way Iso Sniper",
+    "bestPen": 33.6,
+    "quality": "unbuildable"
   },
   {
     "name": "Jack Bradley",
@@ -271,9 +271,9 @@
       "Pss": 39,
       "Reb": 23
     },
-    "archetype": "Ankle Taker",
-    "bestPen": 36.8,
-    "quality": "none"
+    "archetype": "Ball-Hawking Mid-Range Menace",
+    "bestPen": 65.2,
+    "quality": "unbuildable"
   },
   {
     "name": "Brandon McQueen",
@@ -294,9 +294,9 @@
       "Pss": 35,
       "Reb": 25
     },
-    "archetype": "2-Way 3PT-Sniping High Flyer",
-    "bestPen": 12.3,
-    "quality": "ok"
+    "archetype": "High-Flying Slasher",
+    "bestPen": 23.7,
+    "quality": "unbuildable"
   },
   {
     "name": "Jay McCloud",
@@ -317,9 +317,9 @@
       "Pss": 53,
       "Reb": 22
     },
-    "archetype": "2-Way 3PT Slasher",
-    "bestPen": 18.3,
-    "quality": "relaxed"
+    "archetype": "2-Way Iso Sniper",
+    "bestPen": 26.4,
+    "quality": "unbuildable"
   },
   {
     "name": "Chance Greene",
@@ -340,9 +340,9 @@
       "Pss": 46,
       "Reb": 19
     },
-    "archetype": "2-Way 3PT Slasher",
-    "bestPen": 7.6,
-    "quality": "ok"
+    "archetype": "3PT Shot Hunter",
+    "bestPen": 9.8,
+    "quality": "unbuildable"
   },
   {
     "name": "Trey Perry",
@@ -363,9 +363,9 @@
       "Pss": 22,
       "Reb": 7
     },
-    "archetype": "2-Way Off-Screen Shooter",
-    "bestPen": 29.5,
-    "quality": "relaxed"
+    "archetype": "2-Way Iso Sniper",
+    "bestPen": 35.7,
+    "quality": "unbuildable"
   },
   {
     "name": "Cole Perkins",
@@ -388,7 +388,7 @@
     },
     "archetype": "2-Way Off-Screen Shooter",
     "bestPen": 33.6,
-    "quality": "relaxed"
+    "quality": "unbuildable"
   },
   {
     "name": "Dominique Vinson",
@@ -409,9 +409,9 @@
       "Pss": 34,
       "Reb": 44
     },
-    "archetype": "2-Way 3-Level Shot Creator",
-    "bestPen": 23.2,
-    "quality": "relaxed"
+    "archetype": "2-Way Inside-Out Creator",
+    "bestPen": 39.1,
+    "quality": "unbuildable"
   },
   {
     "name": "Sean Mathews",
@@ -434,7 +434,7 @@
     },
     "archetype": "Iso Savant",
     "bestPen": 42.2,
-    "quality": "none"
+    "quality": "unbuildable"
   },
   {
     "name": "Alex Rogers",
@@ -455,8 +455,8 @@
       "Pss": 21,
       "Reb": 45
     },
-    "archetype": "Rim-Rocking Slashing Cleaner",
-    "bestPen": 114.6,
-    "quality": "none"
+    "archetype": "Lockdown Cleaner",
+    "bestPen": 127.5,
+    "quality": "unbuildable"
   }
 ]
