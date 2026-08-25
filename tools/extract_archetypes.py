@@ -12,30 +12,52 @@ from pathlib import Path
 
 import openpyxl
 
-# 2K stat columns used for matching (order matches Archetype_DB sheet)
-STAT_COLS = {
-    "Close Shot": 4,
-    "Driving Layup": 5,
-    "Driving Dunk": 6,
-    "Standing Dunk": 7,
-    "Post Control": 8,
-    "Midrange Shot": 9,
-    "Threepoint Shot": 10,
-    "Free Throw": 11,
-    "Pass Accuracy": 12,
-    "Ball Handle": 13,
-    "Speed With Ball": 14,
-    "Interior Defense": 15,
-    "Perimeter Defense": 16,
-    "Steal": 17,
-    "Block": 18,
-    "Offensive Rebound": 19,
-    "Defensive Rebound": 20,
-    "Speed": 21,
-    "Agility": 22,
-    "Strength": 23,
-    "Vertical": 24,
+# 2K stat columns used for matching, in output order. Columns are located by
+# header text rather than by index: hardcoded indices silently mis-map every
+# stat if a column is ever inserted into the workbook.
+STAT_NAMES = [
+    "Close Shot", "Driving Layup", "Driving Dunk", "Standing Dunk", "Post Control",
+    "Midrange Shot", "Threepoint Shot", "Free Throw", "Pass Accuracy", "Ball Handle",
+    "Speed With Ball", "Interior Defense", "Perimeter Defense", "Steal", "Block",
+    "Offensive Rebound", "Defensive Rebound", "Speed", "Agility", "Strength", "Vertical",
+]
+
+# header text (normalized) -> canonical stat name
+HEADER_ALIASES = {
+    "close shot": "Close Shot", "driving layup": "Driving Layup",
+    "driving dunk": "Driving Dunk", "standing dunk": "Standing Dunk",
+    "post control": "Post Control", "midrange shot": "Midrange Shot",
+    "mid-range shot": "Midrange Shot", "midrange": "Midrange Shot",
+    "threepoint shot": "Threepoint Shot", "three point shot": "Threepoint Shot",
+    "three-point shot": "Threepoint Shot", "3pt": "Threepoint Shot",
+    "free throw": "Free Throw", "pass accuracy": "Pass Accuracy",
+    "ball handle": "Ball Handle", "speed with ball": "Speed With Ball",
+    "interior defense": "Interior Defense", "interior d": "Interior Defense",
+    "perimeter defense": "Perimeter Defense", "perimeter d": "Perimeter Defense",
+    "steal": "Steal", "block": "Block",
+    "offensive rebound": "Offensive Rebound", "defensive rebound": "Defensive Rebound",
+    "speed": "Speed", "agility": "Agility", "strength": "Strength", "vertical": "Vertical",
 }
+
+
+def norm(v):
+    return re.sub(r"\s+", " ", str(v or "")).strip().lower()
+
+
+def find_columns(ws):
+    """Locate each stat column by its header text, scanning the first few rows."""
+    for row in ws.iter_rows(min_row=1, max_row=4, values_only=True):
+        found = {}
+        for idx, cell in enumerate(row):
+            stat = HEADER_ALIASES.get(norm(cell))
+            if stat and stat not in found:
+                found[stat] = idx
+        if len(found) == len(STAT_NAMES):
+            return found
+    missing = [s for s in STAT_NAMES if s not in found]
+    raise SystemExit(
+        "Could not locate all stat columns by header text in the Archetype_DB "
+        "sheet. Missing: " + ", ".join(missing))
 
 POS_ABBR = {
     "Point Guard": "PG",
@@ -88,6 +110,7 @@ def main():
 
     wb = openpyxl.load_workbook(args.workbook, data_only=True)
     ws = wb["Archetype_DB"]
+    stat_cols = find_columns(ws)
 
     archetypes = []
     skipped = 0
@@ -99,7 +122,7 @@ def main():
         stats = {}
         ok = True
         bad_stat = None
-        for stat, col in STAT_COLS.items():
+        for stat, col in stat_cols.items():
             val = parse_range(row[col])
             if val is None:
                 ok = False
@@ -117,11 +140,11 @@ def main():
             "hMin": hmin,
             "hMax": hmax,
             # each stat is [min, max] of the build's legal range
-            "stats": [list(stats[s]) for s in STAT_COLS],
+            "stats": [list(stats[s]) for s in STAT_NAMES],
         })
 
     out = {
-        "statNames": list(STAT_COLS),
+        "statNames": STAT_NAMES,
         "archetypes": archetypes,
     }
     output_path = Path(args.output)
@@ -131,9 +154,17 @@ def main():
         f.write("const ARCHETYPE_DATA = ")
         json.dump(out, f, separators=(",", ":"))
         f.write(";\n")
+        # also require()-able from Node so the test suite and CI can load the
+        # same data file the browser does
+        f.write('if (typeof module !== "undefined" && module.exports) module.exports = ARCHETYPE_DATA;\n')
     print(f"Wrote {len(archetypes)} archetypes to {output_path}"
           + (f" ({skipped} row(s) skipped, see above)" if skipped else ""))
+    if skipped:
+        # a silently-dropped build is a data-quality regression, not a warning
+        print(f"error: {skipped} row(s) could not be parsed (listed above)", file=sys.stderr)
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main() or 0)
