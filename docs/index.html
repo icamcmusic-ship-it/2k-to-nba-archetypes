@@ -9,12 +9,14 @@
     --bg: #f6f7f9; --card: #ffffff; --text: #1a1d21; --muted: #5f6672;
     --accent: #2563eb; --accent-text: #ffffff; --border: #d9dde3;
     --good: #15803d; --ok: #b45309; --bad: #b91c1c; --row-alt: #f1f3f6;
+    --band: #bfd4ff; --band-line: #2563eb; --warn-row: #fff4e5;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #14161a; --card: #1e2126; --text: #e8eaed; --muted: #9aa2ad;
       --accent: #3b82f6; --border: #33383f; --row-alt: #23262c;
       --good: #4ade80; --ok: #fbbf24; --bad: #f87171;
+      --band: #2b3f66; --band-line: #60a5fa; --warn-row: #3a2f1c;
     }
   }
   * { box-sizing: border-box; }
@@ -26,7 +28,10 @@
   .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px;
           padding: 1.25rem; margin-bottom: 1.25rem; }
   h2 { font-size: 1.1rem; margin: 0 0 .75rem; }
+  h3 { font-size: .95rem; margin: 1rem 0 .35rem; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: .6rem; }
+  @media (max-width: 560px) { .grid { grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: .45rem; }
+    body { padding: .85rem; } .card { padding: .9rem; } }
   label { display: block; font-size: .72rem; font-weight: 600; color: var(--muted);
           text-transform: uppercase; letter-spacing: .04em; margin-bottom: .15rem; }
   input[type=number], input[type=text], textarea {
@@ -37,19 +42,32 @@
            padding: .5rem 1rem; font: inherit; font-weight: 600; cursor: pointer; margin-right: .5rem; margin-top: .75rem; }
   button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
   button:hover { filter: brightness(1.1); }
+  button:focus-visible, th.sortable:focus-visible, tr.clickable:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   table { border-collapse: collapse; width: 100%; font-size: .88rem; }
   th, td { padding: .4rem .6rem; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
   th { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
   tbody tr:nth-child(even) { background: var(--row-alt); }
   .scroll { overflow-x: auto; }
+  .sticky-table { max-height: 70vh; overflow: auto; border: 1px solid var(--border); border-radius: 8px; }
+  .sticky-table thead th { position: sticky; top: 0; z-index: 2; background: var(--card); }
+  .sticky-table tbody td:first-child, .sticky-table thead th:first-child {
+    position: sticky; left: 0; z-index: 1; background: var(--card); }
+  .sticky-table tbody tr:nth-child(even) td:first-child { background: var(--row-alt); }
+  .sticky-table thead th:first-child { z-index: 3; }
+  tr.warn td { background: var(--warn-row); }
+  tr.clickable { cursor: pointer; }
+  tr.clickable:hover td { filter: brightness(.97); }
   .match { display: flex; gap: 1rem; flex-wrap: wrap; margin-top: .75rem; }
-  .match-card { flex: 1 1 260px; border: 1px solid var(--border); border-radius: 8px; padding: .75rem 1rem; }
+  .match-card { flex: 1 1 280px; border: 1px solid var(--border); border-radius: 8px; padding: .75rem 1rem; }
   .match-card .rank { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
   .match-card .name { font-weight: 700; font-size: 1.05rem; margin: .15rem 0; }
   .match-card .meta { color: var(--muted); font-size: .85rem; }
   .score { font-weight: 700; }
   .s-good { color: var(--good); } .s-ok { color: var(--ok); } .s-bad { color: var(--bad); }
   .hint { color: var(--muted); font-size: .82rem; margin-top: .35rem; }
+  .banner { border-left: 3px solid var(--ok); background: var(--row-alt); padding: .5rem .75rem;
+            border-radius: 0 6px 6px 0; margin-top: .6rem; font-size: .88rem; }
+  .banner.bad { border-left-color: var(--bad); }
   details { margin-top: .75rem; }
   summary { cursor: pointer; color: var(--accent); font-weight: 600; }
   .err { color: var(--bad); font-weight: 600; margin-top: .5rem; }
@@ -64,15 +82,68 @@
   th.sortable { cursor: pointer; user-select: none; }
   th.sortable:hover { color: var(--text); }
   th.sortable .arrow { opacity: .6; }
-  .pager { display: flex; align-items: center; gap: .6rem; margin-top: .6rem; }
+  .pager { display: flex; align-items: center; gap: .6rem; margin-top: .6rem; flex-wrap: wrap; }
   .pager button { margin: 0; padding: .3rem .7rem; }
+  /* per-stat fit chart */
+  .fitrow { display: grid; grid-template-columns: 130px 1fr 96px; gap: .5rem; align-items: center;
+            font-size: .8rem; padding: .1rem 0; }
+  .fitbar { position: relative; height: 14px; background: var(--row-alt); border-radius: 3px; }
+  .fitbar .band { position: absolute; top: 0; bottom: 0; background: var(--band); border-radius: 3px; }
+  .fitbar .dot { position: absolute; top: -2px; width: 3px; height: 18px; background: var(--band-line); border-radius: 2px; }
+  .fitbar .miss { position: absolute; top: 4px; height: 6px; background: var(--bad); opacity: .8; border-radius: 2px; }
+  .chip { display: inline-block; border: 1px solid var(--border); border-radius: 999px;
+          padding: .05rem .5rem; font-size: .75rem; margin: 0 .25rem .25rem 0; }
+  .tier-5, .tier-4 { color: var(--good); font-weight: 700; }
+  .tier-3 { color: var(--good); } .tier-2, .tier-1 { color: var(--ok); } .tier-0 { color: var(--muted); }
+  .drawer { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: none; z-index: 50; }
+  .drawer.open { display: block; }
+  .drawer-panel { position: absolute; right: 0; top: 0; bottom: 0; width: min(680px, 96vw);
+                  background: var(--card); border-left: 1px solid var(--border); padding: 1.25rem;
+                  overflow: auto; }
+  .skeleton { height: 12px; background: var(--row-alt); border-radius: 4px; margin: .4rem 0; animation: pulse 1.2s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: .5 } }
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1>BBGM → NBA 2K Archetype Converter</h1>
   <div class="sub">Translate Basketball GM ratings (1–100, 50 ≈ NBA average) into their closest NBA 2K build archetypes.
-    Ratings are mapped through NBA player percentiles, then matched against 1,256 2K builds by skill fit — builds demanding skills the player doesn't have are penalized — with a height filter.</div>
+    Ratings are mapped through player percentiles, then matched against 1,256 2K builds in percentile space — builds demanding skills the player doesn't have are penalized, and builds whose <em>shape</em> doesn't look like the player are penalized too.</div>
+
+  <div class="card">
+    <h2>Settings</h2>
+    <div class="row">
+      <div>
+        <label for="calibMode">Grade ratings against</label>
+        <select id="calibMode">
+          <option value="nba" selected>The NBA (default)</option>
+          <option value="league" disabled>This league (load a roster first)</option>
+        </select>
+      </div>
+      <div>
+        <label for="posMode">Position</label>
+        <select id="posMode">
+          <option value="off" selected>Ignore position</option>
+          <option value="soft">Prefer matching position</option>
+        </select>
+      </div>
+      <div>
+        <label for="hBase">Height scale: BBGM 0 = (inches)</label>
+        <input type="number" id="hBase" value="66" step="0.5" style="width:6rem">
+      </div>
+      <div>
+        <label for="hPer">…per rating point</label>
+        <input type="number" id="hPer" value="0.24" step="0.01" style="width:6rem">
+      </div>
+    </div>
+    <div class="hint">"This league" derives percentile anchors from the roster you upload, so a weaker/stronger/historical league is graded against itself instead of against the modern NBA. The height scale is BBGM's default (0 ≈ 5'6", 50 ≈ 6'6", 100 ≈ 7'6") — leagues can customise it.</div>
+    <details>
+      <summary>Weight what you care about</summary>
+      <div class="hint">Multiplies how much each group of stats counts when ranking builds. 1 = the default weighting.</div>
+      <div class="grid" id="weightEditor" style="margin-top:.5rem"></div>
+      <button id="btnResetWeights" class="secondary">Reset weights</button>
+    </details>
+  </div>
 
   <div class="card" id="singleCard">
     <h2>Single player</h2>
@@ -97,14 +168,14 @@
     <button id="btnSample" class="secondary">Load a sample player</button>
     <button id="btnCopyLink" class="secondary" style="display:none">Copy shareable link</button>
     <div id="singleErr" class="err" style="display:none"></div>
-    <div id="singleOut" aria-live="polite"></div>
+    <div id="singleOut"></div>
   </div>
 
   <div class="card">
     <h2>Batch: upload a ratings CSV</h2>
-    <div class="hint">Use a BBGM player-ratings export. Recognized headers: Name, Pos, Hgt, Str/Stre, Spd, Jmp, End/Endu, Ins, Dnk, FT, 2Pt/Mid, 3Pt/TP, oIQ, dIQ, Drb, Pss, Reb (case-insensitive, extra columns ignored).</div>
+    <div class="hint">Use a BBGM player-ratings export (comma, semicolon or tab delimited — the delimiter is detected). Recognized headers: Name, Pos, Team, Age, Ovr, Pot, Hgt, Str/Stre, Spd, Jmp, End/Endu, Ins, Dnk, FT, 2Pt/Mid, 3Pt/TP, oIQ, dIQ, Drb, Pss, Reb (case-insensitive, extra columns ignored).</div>
     <div id="dropzone" class="dropzone">
-      <input type="file" id="csvFile" accept=".csv,text/csv">
+      <input type="file" id="csvFile" accept=".csv,.tsv,.txt,text/csv">
       <div class="hint">...or drag &amp; drop a CSV file anywhere in this box</div>
     </div>
     <details style="margin-top:.5rem">
@@ -115,390 +186,178 @@
     <button id="btnSampleRoster" class="secondary">Load sample roster</button>
     <button id="btnDownload" class="secondary" style="display:none">Download results CSV</button>
     <div id="batchProgress" class="progress" style="display:none"><div id="batchProgressBar" class="progress-bar"></div></div>
-    <div id="batchProgressText" class="hint"></div>
+    <div id="batchProgressText" class="hint" aria-live="polite"></div>
     <div id="batchErr" class="err" style="display:none"></div>
-    <div id="batchSearchWrap" style="display:none; margin-top:.75rem; max-width:320px">
-      <label for="batchSearch">Filter</label>
-      <input type="text" id="batchSearch" placeholder="Filter by name or position">
+    <div id="batchWarn" class="hint" style="display:none"></div>
+    <div id="batchControls" style="display:none; margin-top:.75rem">
+      <div class="row">
+        <div style="max-width:260px">
+          <label for="batchSearch">Filter by name</label>
+          <input type="text" id="batchSearch" placeholder="Name or position">
+        </div>
+        <div>
+          <label for="batchPos">Position</label>
+          <select id="batchPos"><option value="">All</option></select>
+        </div>
+        <div>
+          <label for="batchQuality">Fit quality</label>
+          <select id="batchQuality">
+            <option value="">All</option>
+            <option value="ok">Clean match only</option>
+            <option value="relaxed">Relaxed match</option>
+            <option value="none">No legal build</option>
+          </select>
+        </div>
+        <div>
+          <label for="batchView">View</label>
+          <select id="batchView">
+            <option value="players" selected>Players</option>
+            <option value="teams">Teams</option>
+            <option value="archetypes">Archetype usage</option>
+          </select>
+        </div>
+        <div>
+          <label for="batchCompact"><input type="checkbox" id="batchCompact"> Compact</label>
+        </div>
+      </div>
     </div>
-    <div class="scroll" id="batchOut" aria-live="polite"></div>
+    <div id="batchSummary" class="hint" aria-live="polite"></div>
+    <div id="batchOut"></div>
     <div id="batchPager" class="pager" style="display:none"></div>
   </div>
 
   <div class="card">
     <details>
+      <summary>Archetype browser — search the 1,256 builds directly</summary>
+      <div class="row" style="margin-top:.5rem">
+        <div style="max-width:240px"><label for="abSearch">Name</label><input type="text" id="abSearch" placeholder="e.g. Sniper"></div>
+        <div><label for="abPos">Position</label><select id="abPos"><option value="">All</option></select></div>
+        <div><label for="abHMax">Max height (in)</label><input type="number" id="abHMax" placeholder="e.g. 78" style="width:7rem"></div>
+        <div><label for="abTPMax">Max 3PT requirement</label><input type="number" id="abTPMax" placeholder="e.g. 79" style="width:8rem"></div>
+      </div>
+      <div id="abOut" class="hint">Type or filter above to search builds.</div>
+    </details>
+  </div>
+
+  <div class="card">
+    <details>
       <summary>Badge legend</summary>
-      <p>Badge levels shown for the single-player calculator are derived from the converted 2K ratings and height, using each badge's real attribute thresholds and height range. Badges with alternative requirements (e.g. Deadeye: Midrange <em>or</em> 3PT) use the player's best qualifying attribute; badges that genuinely need multiple skills (e.g. Posterizer: Driving Dunk <em>and</em> Vertical) are capped at the lowest tier reached across them. Badges whose height requirement the player doesn't meet show as unavailable.</p>
+      <p>Badge levels shown for the single-player calculator are derived from the converted 2K ratings and height, using each badge's real attribute thresholds and height range (<span id="badgeVer"></span>). Badges with alternative requirements (e.g. Deadeye: Midrange <em>or</em> 3PT) use the player's best qualifying attribute; badges that genuinely need multiple skills (e.g. Posterizer: Driving Dunk <em>and</em> Vertical) are capped at the lowest tier reached across them. Badges whose height requirement the player doesn't meet show as unavailable. The badge-point total approximates 2K's own tier cost budget (Bronze 2 → Legend 16), so two builds can be compared by how much badge economy they actually unlock rather than by a raw badge count.</p>
     </details>
   </div>
 
   <div class="card">
     <details>
       <summary>Methodology</summary>
-      <p>Each BBGM rating is converted to an NBA percentile using the distribution of all current NBA players, then that percentile is converted to the equivalent NBA 2K rating using 2K's own rating distribution. An exponential curve stretches both the top and bottom 10% so elite (and truly poor) ratings translate to truly elite (or poor) 2K values instead of bunching up near the middle.</p>
-      <p>BBGM stats fan out to 2K stats: Ins → Close Shot / Driving Layup / Post Control; Dnk → Driving / Standing Dunk; Drb → Ball Handle / Speed With Ball; dIQ → Interior D / Perimeter D / Steal / Block; Reb → both rebounds; Spd → Speed / Agility; Stre → Strength; Jmp → Vertical; Mid, 3Pt and FT map directly, blended with a share of OIQ for Midrange, Ball Handle, and Pass Accuracy (offensive IQ loosely covers shot selection, handles, and court vision in 2K terms). Endu isn't modeled by any 2K attribute — it's shown as a separate conditioning note instead of being silently ignored. Height converts to inches (BBGM 0 ≈ 5'6", 50 ≈ 6'6", 100 ≈ 7'6").</p>
-      <p>The converted 2K profile is compared to every build's actual rating <em>range</em> (not a midpoint) with an asymmetric weighted fit score: a player sitting inside a build's range costs nothing; every point a build's <em>minimum</em> exceeds what the player has counts as a skill deficit that scales quadratically (one glaring hole sinks a build rather than averaging away), while exceeding a build's <em>maximum</em> costs only a third as much. Any build demanding a skill 22+ points beyond the player is disqualified outright (relaxed only if too few builds survive). Physicals and primary scoring weigh more, and any stat at/above the 85th or at/below the 15th NBA percentile gets a 1.5× boost — builds must feature the player's elite skills and avoid demanding the ones he clearly lacks. Builds whose height range doesn't fit the player (±1") are excluded — the filter relaxes automatically if nothing fits, and height itself is clamped to the archetype database's supported range (roughly 5'9"–7'4") before matching, with a note shown when that clamp kicks in. Any remaining height mismatch within the pool is penalized per inch. The displayed "% fit" is the match's percentile rank against every other build reachable for this player — not an absolute quality score — so it stays informative even for below-average or maxed-out inputs. Each match card lists the build's biggest remaining skill gaps so you can see where the player falls short.</p>
+      <p><strong>1. BBGM → percentile.</strong> Each rating becomes a percentile within a reference distribution — the modern NBA by default, or the uploaded roster itself in "this league" mode. An exponential curve stretches both the top and bottom 10% so elite (and truly poor) ratings stay elite (or poor) after translation.</p>
+      <p><strong>2. Percentile → 2K rating.</strong> The percentile maps onto 2K's own rating distribution for that stat. Each 2K stat blends the BBGM inputs that actually drive it rather than copying one: Interior Defense is dIQ + Strength + height, Block is dIQ + Jmp + height, Driving Dunk is Dnk + Jmp + Spd, Defensive Rebound is Reb + height, and so on. Height feeds ratings here, not just the build filter, so a 7'2" and a 6'2" player with identical dIQ no longer convert to identical rim protection. <code>Endu</code> isn't modeled by any 2K attribute — it's shown as a separate conditioning note instead of being silently ignored.</p>
+      <p><strong>3. Matching.</strong> Both the player and every build's min/max range are expressed in <em>percentiles</em>, so a point means the same thing in every stat and the declared per-stat weights actually control influence. A player inside a build's range costs nothing; falling short of a minimum is penalized quadratically; exceeding a maximum costs a third as much. On top of that, a <em>shape</em> term penalizes builds whose strength/weakness pattern doesn't look like the player's — without it only deficits bind, so the cheapest builds in the database win for everybody. Any build demanding a skill 40+ percentile points beyond the player is disqualified; if nothing survives even a relaxed gate, the results are still shown but flagged "no legal build" rather than silently presented as a clean match. Builds whose height range doesn't fit (±1") are excluded, relaxing to nearest-height builds rather than the whole database.</p>
+      <p><strong>4. Fit grade.</strong> The headline number is a calibrated grade derived from the raw penalty (Excellent / Good / Loose / Poor / No real build), anchored on the penalty distribution of a real 966-player league. It replaces the old "% fit", which was a percentile rank of the build inside the player's own pool and was therefore 100.0 for 97% of players by construction. The build's rank within the eligible pool is still shown, as a secondary line.</p>
+      <p><strong>5. Badges.</strong> Converted ratings and height run through 2K's real badge thresholds (<span id="badgeVer2"></span>), Bronze → Legend, gated by each badge's height range.</p>
+    </details>
+  </div>
+
+  <div class="card">
+    <details>
+      <summary>Known limitations</summary>
+      <ul class="hint" style="margin:0; padding-left:1.1rem">
+        <li>The build database is shooting-first: 73% of the 1,256 builds require a 3PT rating of 80+, so shooting archetypes are common even with a perfectly calibrated matcher. Use the archetype browser's "max 3PT requirement" filter to see the rest.</li>
+        <li>59% of the database's stat entries have min = max; those are widened by ±2 before matching so they aren't dramatically harsher than genuinely banded stats.</li>
+        <li>Free Throw drives no 2K badge, so its conversion only affects archetype matching.</li>
+        <li>Wingspan and weight/body type aren't modeled — BBGM has no equivalent input, and Strength is only a rough proxy for the latter.</li>
+        <li>Badge thresholds come from a single game version; 2K changes them year to year.</li>
+      </ul>
     </details>
   </div>
 </div>
 
+<div class="drawer" id="drawer"><div class="drawer-panel"><button class="secondary" id="drawerClose">Close</button><div id="drawerBody"></div></div></div>
+
 <script src="archetypes.js"></script>
+<script src="badges.js"></script>
+<script src="engine.js"></script>
 <script>
 "use strict";
-// ---------- Percentile anchor tables ----------
-const PCTL = [1, 10, 25, 50, 75, 90, 95, 99];
+const E = BBGM2K;
+const BBGM_STATS = E.BBGM_STATS;
 
-// BBGM rating at each percentile (current NBA players)
-const BBGM_ANCHORS = {
-  Hgt:[23,33,40,47,55,62,66,74], Stre:[23,39,44,49,55,63,68,78],
-  Spd:[32,42,46,52,60,68,72,82], Jmp:[29,40,45,50,59,67,71,81],
-  Endu:[17,32,36,41,49,59,65,82], Ins:[17.88,29,36,41,47,56,62,79.12],
-  Dnk:[21,38,44,49,56,65,71,87], FT:[10.88,32,39,45,55,63,67,75.12],
-  Mid:[20,33,39,46,56,67,75,89], TP:[1,20,28,41,51,64,71,86.12],
-  OIQ:[28,37,40,45,52,59,65,78], DIQ:[26,36,40,45,51,57,61,72],
-  Drb:[24,39,45,50,56,65,70,79], Pss:[24,37,42,46,52,63,70,81.12],
-  Reb:[32,41,45,50,55,63,69,81],
+// localStorage throws in Safari Private Browsing and locked-down enterprise
+// profiles; an unguarded write there aborts the click handler and the button
+// silently does nothing.
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch { /* storage unavailable */ } },
 };
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 
-// 2K rating at each percentile
-const K2_ANCHORS = {
-  "Close Shot":[64.35,71,75,80,84,89,92,95.65],
-  "Driving Layup":[50.36,60,70,75,81,88,90,94.64],
-  "Driving Dunk":[30,65,74,83,89,93,94,96.51],
-  "Standing Dunk":[25,39,51,72,85,90,92,95],
-  "Post Control":[30,43.3,50,60,79,87,88,93],
-  "Midrange Shot":[38,70,74,80,86,90,92,95.52],
-  "Threepoint Shot":[25,70.2,80,82,85,90,92,95.38],
-  "Free Throw":[39,56,61,70,78,85,91,98.85],
-  "Pass Accuracy":[25,60,70,76,85,87,91,95],
-  "Ball Handle":[38.9,48,60,75,81,86,88,92.55],
-  "Speed With Ball":[25,41,55,68,75,80,84.9,88.58],
-  "Interior Defense":[34.08,60,70,80,84,88,90,92.92],
-  "Perimeter Defense":[35,42.7,61,74,82,87,92,94],
-  "Steal":[33,40,48,60,75,85,89,94],
-  "Block":[30,50,74,80,86.25,93,94.5,95],
-  "Offensive Rebound":[25,39,59,74,84,92,94,97],
-  "Defensive Rebound":[39.16,55,70,81,90,94,95,97],
-  "Speed":[50,65,71,80,84,87,90,93],
-  "Agility":[38,51,61,74,80,83,85,88.63],
-  "Strength":[47,65,73,83,86,91,91.2,95],
-  "Vertical":[55.43,70,75,80,83,86,88,90.57],
-};
+// ---------- Settings ----------
+const LS_PLAYER_KEY = "bbgm2k:lastPlayer";
+const LS_TOPN_KEY = "bbgm2k:topN";
+const LS_WEIGHTS_KEY = "bbgm2k:weights";
+const topNSel = document.getElementById("topN");
+const calibSel = document.getElementById("calibMode");
+const posSel = document.getElementById("posMode");
+let leagueAnchors = null;
+let catWeights = {};
 
-// 2K stat -> [[BBGM source stat, blend share], ...], matching weight.
-// Most 2K stats come from a single BBGM stat; a few (playmaking/shooting
-// touch-stats) also draw a share from OIQ, since offensive IQ in BBGM maps
-// loosely onto shot selection, court vision, and handles rather than any one
-// 2K attribute. Shares for a stat must sum to 1.
-const K2_FROM_BBGM = {
-  "Close Shot":[[["Ins",1]],1], "Driving Layup":[[["Ins",1]],1], "Post Control":[[["Ins",1]],1],
-  "Driving Dunk":[[["Dnk",1]],1.25], "Standing Dunk":[[["Dnk",1]],1],
-  "Midrange Shot":[[["Mid",0.85],["OIQ",0.15]],1.25],
-  "Threepoint Shot":[[["TP",1]],1.5], "Free Throw":[[["FT",1]],0.75],
-  "Pass Accuracy":[[["Pss",0.7],["OIQ",0.3]],1],
-  "Ball Handle":[[["Drb",0.8],["OIQ",0.2]],1.1], "Speed With Ball":[[["Drb",1]],1],
-  "Interior Defense":[[["DIQ",1]],1], "Perimeter Defense":[[["DIQ",1]],1],
-  "Steal":[[["DIQ",1]],0.9], "Block":[[["DIQ",1]],0.9],
-  "Offensive Rebound":[[["Reb",1]],1], "Defensive Rebound":[[["Reb",1]],1],
-  "Speed":[[["Spd",1]],1.5], "Agility":[[["Spd",1]],1],
-  "Strength":[[["Stre",1]],1.5], "Vertical":[[["Jmp",1]],1.25],
-};
+document.getElementById("badgeVer").textContent = E.BADGE_VERSION;
+document.getElementById("badgeVer2").textContent = E.BADGE_VERSION;
 
-const BBGM_STATS = Object.keys(BBGM_ANCHORS);
-const STAT_IDX = Object.fromEntries(ARCHETYPE_DATA.statNames.map((s,i)=>[s,i]));
-
-// ---------- Conversion ----------
-function interp(x, xs, ys) {
-  if (x <= xs[0]) return ys[0];
-  if (x >= xs[xs.length-1]) return ys[ys.length-1];
-  for (let i = 1; i < xs.length; i++) {
-    if (x <= xs[i]) {
-      const t = (x - xs[i-1]) / (xs[i] - xs[i-1]);
-      return ys[i-1] + t * (ys[i] - ys[i-1]);
+(function buildWeightEditor() {
+  const el = document.getElementById("weightEditor");
+  try { catWeights = JSON.parse(store.get(LS_WEIGHTS_KEY) || "{}") || {}; } catch { catWeights = {}; }
+  for (const cat of Object.keys(E.STAT_CATEGORIES)) {
+    const v = catWeights[cat] == null ? 1 : catWeights[cat];
+    const d = document.createElement("div");
+    d.innerHTML = `<label for="w_${cat}">${cat}</label>` +
+      `<input type="number" id="w_${cat}" min="0" max="4" step="0.25" value="${v}">`;
+    el.appendChild(d);
+  }
+  el.addEventListener("input", () => {
+    for (const cat of Object.keys(E.STAT_CATEGORIES)) {
+      const n = parseFloat(document.getElementById("w_" + cat).value);
+      catWeights[cat] = isNaN(n) ? 1 : Math.max(0, Math.min(4, n));
     }
-  }
-  return ys[ys.length-1];
-}
-
-// BBGM rating -> NBA percentile, with symmetric exponential stretch of both tails
-function bbgmToPercentile(stat, val) {
-  const anchors = BBGM_ANCHORS[stat];
-  let p = interp(val, anchors, PCTL);
-  // extrapolate a touch beyond the 99th/below the 1st for truly extreme ratings,
-  // scaled to how spread out this stat's own anchors are so a "point" of Hgt and
-  // a "point" of TP don't extrapolate at the same rate
-  const spread = anchors[7] - anchors[0];
-  if (val > anchors[7]) p = Math.min(99.9, 99 + (val - anchors[7]) * (10 / spread));
-  else if (val < anchors[0]) p = Math.max(0.1, 1 - (anchors[0] - val) * (10 / spread));
-  if (p > 90) p = 90 + 9 * Math.pow((p - 90) / 9, 1.5);        // widen great-vs-elite gap
-  else if (p < 10) p = 10 - 9 * Math.pow((10 - p) / 9, 1.5);   // widen bad-vs-terrible gap
-  return p;
-}
-
-function percentileTo2K(stat2k, p) {
-  return interp(p, PCTL, K2_ANCHORS[stat2k]);
-}
-
-function bbgmHeightToInches(hgt) { return 66 + hgt * 0.24; } // 0→5'6", 50→6'6", 100→7'6"
-
-function convertPlayer(bbgm) {
-  const pctl = {}, k2 = {}, blendPctl = {};
-  for (const s of BBGM_STATS) pctl[s] = bbgmToPercentile(s, bbgm[s]);
-  for (const [stat2k, [srcs]] of Object.entries(K2_FROM_BBGM)) {
-    const p = srcs.reduce((sum, [src, share]) => sum + share * pctl[src], 0);
-    blendPctl[stat2k] = p;
-    k2[stat2k] = percentileTo2K(stat2k, p);
-  }
-  // Endu isn't modeled by any 2K attribute — surfaced separately as a
-  // conditioning note rather than silently dropped.
-  return { pctl, k2, blendPctl, heightIn: bbgmHeightToInches(bbgm.Hgt), enduPctl: pctl.Endu };
-}
-
-// ---------- Matching ----------
-// Fit is an asymmetric weighted distance, not cosine similarity: cosine only
-// compares the *shape* of a profile, so a low-rated player could match an elite
-// build he can't actually play like. Here, every point a build demands ABOVE
-// what the player has (a skill deficit) is penalized at full weight, while
-// having MORE than the build needs is only lightly penalized (wasted talent).
-const DEFICIT_GRACE = 3;    // ignore tiny shortfalls within build-range noise
-const DEFICIT_CURVE = 15;   // quadratic ramp: a 30-pt gap hurts far more than 2x a 15-pt gap
-const SURPLUS_SCALE = 1 / 3; // exceeding a build's needs hurts 3x less than lacking them
-const HEIGHT_W = 2.5;       // penalty points per inch outside the build's height range
-const GAP_MIN = 8;          // deficit size worth flagging to the user
-const HARD_GAP = 22;        // any single deficit this large disqualifies the build outright
-const HARD_GAP_RELAXED = 32; // fallback threshold if too few builds survive
-
-function fmtH(h) { return `${Math.floor(h/12)}'${Math.round(h%12)}"`; }
-function fmtHeight(hMin, hMax) { return fmtH(hMin) + (hMax !== hMin ? `–${fmtH(hMax)}` : ""); }
-
-// The archetype DB doesn't cover every height BBGM can produce (69"-88" here).
-// Match against the nearest supported height instead of silently falling
-// back to the whole DB (which would discard the height constraint entirely).
-const DB_H_MIN = Math.min(...ARCHETYPE_DATA.archetypes.map(a => a.hMin));
-const DB_H_MAX = Math.max(...ARCHETYPE_DATA.archetypes.map(a => a.hMax));
-
-function matchArchetypes(conv, topN = 3) {
-  // signature boost: a stat at/above the 85th percentile OR at/below the 15th
-  // gets 1.5x weight — builds must feature the player's elite skills AND avoid
-  // demanding the skills he clearly lacks
-  const stats = ARCHETYPE_DATA.statNames;
-  const weights = stats.map(s => {
-    const [, w] = K2_FROM_BBGM[s];
-    const p = conv.blendPctl[s];
-    return p >= 85 || p <= 15 ? w * 1.5 : w;
+    store.set(LS_WEIGHTS_KEY, JSON.stringify(catWeights));
+    rerunAll();
   });
-  const totalW = weights.reduce((a, b) => a + b, 0);
-  const userVec = stats.map(s => conv.k2[s]);
-  const hInRaw = conv.heightIn;
-  const hIn = Math.max(DB_H_MIN, Math.min(DB_H_MAX, hInRaw));
-  const heightClamped = hIn !== hInRaw;
+})();
+document.getElementById("btnResetWeights").addEventListener("click", () => {
+  catWeights = {};
+  for (const cat of Object.keys(E.STAT_CATEGORIES)) document.getElementById("w_" + cat).value = 1;
+  store.set(LS_WEIGHTS_KEY, "{}");
+  rerunAll();
+});
 
-  function score(list) {
-    const out = [];
-    for (const a of list) {
-      let pen = 0, maxGap = 0;
-      const gaps = [];
-      for (let i = 0; i < userVec.length; i++) {
-        // a.stats[i] is [min, max] of the build's legal range for this stat —
-        // deficit/surplus are measured against the band, not a midpoint, so a
-        // player sitting inside the range isn't penalized at all
-        const [lo, hi] = a.stats[i];
-        const deficit = lo - userVec[i]; // >0: build's minimum exceeds what the player has
-        const surplus = userVec[i] - hi; // >0: player exceeds the build's maximum
-        if (deficit > DEFICIT_GRACE) {
-          const d = deficit - DEFICIT_GRACE;
-          // quadratic ramp: one glaring hole should sink a build, not average away
-          pen += weights[i] * d * (1 + d / DEFICIT_CURVE);
-          if (deficit > maxGap) maxGap = deficit;
-          if (deficit >= GAP_MIN) gaps.push({ stat: stats[i], short: deficit });
-        } else if (surplus > 0) {
-          pen += weights[i] * surplus * SURPLUS_SCALE;
-        }
-      }
-      pen /= totalW;
-      pen += HEIGHT_W * (hIn < a.hMin ? a.hMin - hIn : hIn > a.hMax ? hIn - a.hMax : 0);
-      gaps.sort((x, y) => y.short - x.short);
-      out.push({ a, pen, maxGap, gaps: gaps.slice(0, 3) });
-    }
-    out.sort((x, y) => x.pen - y.pen);
-    return out;
+function weightScale() {
+  const out = {};
+  let any = false;
+  for (const [cat, stats] of Object.entries(E.STAT_CATEGORIES)) {
+    const w = catWeights[cat];
+    if (w != null && w !== 1) { any = true; for (const s of stats) out[s] = w; }
   }
+  return any ? out : null;
+}
+function convOpts() { return calibSel.value === "league" && leagueAnchors ? { anchors: leagueAnchors } : {}; }
+function matchOpts(pos) {
+  const o = { weightScale: weightScale() };
+  if (posSel.value === "soft" && pos) o.pos = pos;
+  return o;
+}
+function applyHeightScale() {
+  const b = parseFloat(document.getElementById("hBase").value);
+  const p = parseFloat(document.getElementById("hPer").value);
+  if (!isNaN(b) && !isNaN(p) && p > 0) E.setHeightScale(b, p);
+}
+["calibMode", "posMode", "hBase", "hPer"].forEach(id =>
+  document.getElementById(id).addEventListener("change", () => { applyHeightScale(); rerunAll(); }));
 
-  // topN can be Infinity ("all eligible") — relaxation should still target a
-  // small, fixed sample size, not "enough for infinity" (which would always
-  // fall through to the full unfiltered DB).
-  const minWanted = Number.isFinite(topN) ? topN : 5;
-
-  let pool = ARCHETYPE_DATA.archetypes.filter(a => hIn >= a.hMin - 1 && hIn <= a.hMax + 1);
-  if (pool.length < minWanted) pool = ARCHETYPE_DATA.archetypes.filter(a => hIn >= a.hMin - 2 && hIn <= a.hMax + 2);
-  if (pool.length < minWanted) pool = ARCHETYPE_DATA.archetypes;
-
-  // hard disqualifier: a build demanding a skill the player is nowhere near
-  // (e.g. a 3PT build for a non-shooter) is out, no matter how well the rest fits
-  const scored = score(pool);
-  let final = scored.filter(x => x.maxGap <= HARD_GAP);
-  if (final.length < minWanted) final = scored.filter(x => x.maxGap <= HARD_GAP_RELAXED);
-  if (final.length < minWanted) final = scored;
-
-  // Score is a percentile-of-fit against every other build in this player's
-  // own pool, not an absolute 0-100 "quality" scale. 2K builds are uniformly
-  // elite-rated, so a fixed pen*4 scale saturates near 0% for most real
-  // rosters and can't tell "closest fit" from "how good is this player" —
-  // percentile rank stays informative and monotonic across the whole range.
-  const pens = scored.map(x => x.pen).sort((a, b) => a - b);
-  const pctOf = pen => {
-    if (pens.length <= 1) return 100;
-    // count of builds with strictly lower (better) pen than this one
-    let lo = 0, hi = pens.length;
-    while (lo < hi) { const mid = (lo + hi) >> 1; if (pens[mid] < pen) lo = mid + 1; else hi = mid; }
-    return Math.round((100 * (1 - lo / pens.length)) * 10) / 10;
-  };
-
-  return {
-    heightClamped, heightUsedIn: hIn,
-    // bestPen is the #1 match's raw (unnormalized) penalty — comparable
-    // across different players, unlike the percentile score, which by
-    // construction always puts a player's own best-fitting build near 100%
-    // regardless of how good that best fit actually is.
-    bestPen: scored.length ? Math.round(scored[0].pen * 10) / 10 : 0,
-    matches: final.slice(0, topN).map(({ a, pen, gaps }) => ({
-      name: a.name, pos: a.pos,
-      height: fmtHeight(a.hMin, a.hMax),
-      score: pctOf(pen),
-      gapPts: Math.round(pen * 10) / 10,
-      gaps: gaps.map(g => `${g.stat} −${Math.round(g.short)}`),
-    })),
-  };
+function rerunAll() {
+  if (document.getElementById("singleOut").innerHTML) document.getElementById("btnCalc").click();
+  if (lastBatchRows) recomputeBatch();
 }
 
-// ---------- 2K Badges ----------
-// thresholds: [Bronze, Silver, Gold, HoF, Legend] — null means that tier is unreachable via this attribute
-const TIERS = ["None", "Bronze", "Silver", "Gold", "HoF", "Legend"];
-function ft(s) { const [f, i] = s.split("'").map(Number); return f * 12 + i; }
-
-const BADGES = [
-  // Shooting
-  { name: "Deadeye", any: true, cat: "Shooting", h: [ft("5'9"), ft("7'4")], attrs: [
-    { stat: "Midrange Shot", t: [73, 85, 92, 95, 99] }, { stat: "Threepoint Shot", t: [73, 85, 92, 95, 99] }] },
-  { name: "Limitless Range", cat: "Shooting", h: [ft("5'9"), ft("7'4")], attrs: [
-    { stat: "Threepoint Shot", t: [83, 89, 93, 96, 99] }] },
-  { name: "Mini Marksman", any: true, cat: "Shooting", h: [ft("5'9"), ft("6'3")], attrs: [
-    { stat: "Midrange Shot", t: [71, 82, 94, 97, 99] }, { stat: "Threepoint Shot", t: [71, 82, 94, 97, 99] }] },
-  { name: "Set Shot Specialist", any: true, cat: "Shooting", h: [ft("5'9"), ft("7'4")], attrs: [
-    { stat: "Midrange Shot", t: [65, 78, 89, 93, 98] }, { stat: "Threepoint Shot", t: [65, 78, 89, 95, 98] }] },
-  { name: "Shifty Shooter", any: true, cat: "Shooting", h: [ft("5'9"), ft("6'11")], attrs: [
-    { stat: "Midrange Shot", t: [76, 87, 91, 96, 99] }, { stat: "Threepoint Shot", t: [76, 87, 91, 96, 99] }] },
-  // Playmaking
-  { name: "Ankle Assassin", cat: "Playmaking", h: [ft("5'9"), ft("6'10")], attrs: [
-    { stat: "Ball Handle", t: [75, 86, 93, 95, 98] }] },
-  { name: "Bail Out", cat: "Playmaking", h: [ft("5'9"), ft("7'4")], attrs: [
-    { stat: "Pass Accuracy", t: [85, 91, 94, 96, 99] }] },
-  { name: "Break Starter", cat: "Playmaking", h: [ft("5'9"), ft("7'4")], attrs: [
-    { stat: "Pass Accuracy", t: [65, 75, 87, 93, 98] }] },
-  { name: "Dimer", cat: "Playmaking", h: [ft("5'9"), ft("7'4")], attrs: [
-    { stat: "Pass Accuracy", t: [55, 71, 82, 92, 98] }] },
-  { name: "Handles For Days", cat: "Playmaking", h: [ft("5'9"), ft("7'0")], attrs: [
-    { stat: "Ball Handle", t: [71, 81, 90, 94, 97] }] },
-  { name: "Lightning Launch", cat: "Playmaking", h: [ft("5'9"), ft("6'11")], attrs: [
-    { stat: "Speed With Ball", t: [68, 75, 86, 91, 94] }] },
-  { name: "Strong Handle", cat: "Playmaking", h: [ft("5'9"), ft("6'11")], attrs: [
-    { stat: "Ball Handle", t: [60, 67, 73, 77, 80] }, { stat: "Strength", t: [60, 65, 73, 84, 93] }] },
-  { name: "Unpluckable", any: true, cat: "Playmaking", h: [ft("5'9"), ft("7'4")], attrs: [
-    { stat: "Ball Handle", t: [70, 80, 92, 96, 99] }, { stat: "Post Control", t: [75, 86, 96, null, null] }] },
-  { name: "Versatile Visionary", cat: "Playmaking", h: [ft("5'9"), ft("7'4")], attrs: [
-    { stat: "Pass Accuracy", t: [70, 76, 84, 95, 99] }] },
-  // Finishing
-  { name: "Aerial Wizard", any: true, cat: "Finishing", h: [ft("5'9"), ft("7'4")], attrs: [
-    { stat: "Driving Dunk", t: [64, 70, 80, 89, 97] }, { stat: "Standing Dunk", t: [60, 75, 84, 92, 98] }] },
-  { name: "Float Game", any: true, cat: "Finishing", h: [ft("5'9"), ft("7'4")], attrs: [
-    { stat: "Close Shot", t: [68, 78, 86, 92, 98] }, { stat: "Driving Layup", t: [65, 78, 88, 95, 98] }] },
-  { name: "Hook Specialist", cat: "Finishing", h: [ft("5'9"), ft("7'4")], attrs: [
-    { stat: "Close Shot", t: [60, 75, 87, 94, 99] }, { stat: "Post Control", t: [61, 65, 80, 90, 97] }] },
-  { name: "Layup Mixmaster", cat: "Finishing", h: [ft("5'9"), ft("6'11")], attrs: [
-    { stat: "Driving Layup", t: [75, 85, 93, 97, 99] }] },
-  { name: "Paint Prodigy", cat: "Finishing", h: [ft("6'3"), ft("7'4")], attrs: [
-    { stat: "Close Shot", t: [73, 84, 92, 96, 99] }] },
-  { name: "Physical Finisher", cat: "Finishing", h: [ft("5'9"), ft("7'4")], attrs: [
-    { stat: "Strength", t: [60, 67, 75, 83, 97] }, { stat: "Driving Layup", t: [70, 80, 90, 96, 97] }] },
-  { name: "Post Fade Phenom", cat: "Finishing", h: [ft("5'9"), ft("7'4")], attrs: [
-    { stat: "Post Control", t: [60, 70, 79, 84, 90] }, { stat: "Midrange Shot", t: [61, 71, 80, 90, 94] }] },
-  { name: "Post Powerhouse", cat: "Finishing", h: [ft("6'4"), ft("7'4")], attrs: [
-    { stat: "Post Control", t: [64, 75, 85, 93, 98] }, { stat: "Strength", t: [70, 79, 86, 95, 96] }] },
-  { name: "Post-Up Poet", cat: "Finishing", h: [ft("6'0"), ft("7'4")], attrs: [
-    { stat: "Post Control", t: [67, 77, 87, 95, 99] }] },
-  { name: "Posterizer", cat: "Finishing", h: [ft("5'9"), ft("7'4")], attrs: [
-    { stat: "Driving Dunk", t: [73, 87, 93, 96, 99] }, { stat: "Vertical", t: [65, 75, 80, 85, 90] }] },
-  { name: "Rise Up", cat: "Finishing", h: [ft("6'6"), ft("7'4")], attrs: [
-    { stat: "Standing Dunk", t: [72, 81, 90, 95, 99] }, { stat: "Vertical", t: [60, 62, 66, 69, 71] }] },
-  // Defense
-  { name: "Challenger", cat: "Defense", h: [ft("5'9"), ft("6'11")], attrs: [
-    { stat: "Perimeter Defense", t: [71, 82, 92, 95, 99] }] },
-  { name: "Glove", cat: "Defense", h: [ft("5'9"), ft("7'0")], attrs: [
-    { stat: "Steal", t: [67, 79, 91, 96, 99] }] },
-  { name: "High-Flying Denier", cat: "Defense", h: [ft("6'3"), ft("7'4")], attrs: [
-    { stat: "Block", t: [68, 78, 88, 92, 99] }, { stat: "Vertical", t: [60, 74, 80, 83, 85] }] },
-  { name: "Immovable Enforcer", cat: "Defense", h: [ft("5'9"), ft("7'4")], attrs: [
-    { stat: "Perimeter Defense", t: [62, 72, 84, 89, 94] }, { stat: "Strength", t: [71, 82, 85, 91, 92] }] },
-  { name: "Interceptor", cat: "Defense", h: [ft("5'9"), ft("7'4")], attrs: [
-    { stat: "Steal", t: [60, 73, 85, 94, 98] }] },
-  { name: "Off-Ball Pest", cat: "Defense", h: [ft("5'9"), ft("7'4")], attrs: [
-    { stat: "Interior Defense", t: [69, 76, 85, 94, 97] }, { stat: "Perimeter Defense", t: [58, 68, 80, 87, 98] }] },
-  { name: "On-Ball Menace", cat: "Defense", h: [ft("5'9"), ft("6'9")], attrs: [
-    { stat: "Perimeter Defense", t: [74, 85, 91, 96, 99] }, { stat: "Agility", t: [70, 76, 80, 84, 86] }] },
-  { name: "Paint Patroller", cat: "Defense", h: [ft("6'6"), ft("7'4")], attrs: [
-    { stat: "Interior Defense", t: [60, 70, 77, 84, 89] }, { stat: "Block", t: [74, 84, 93, 97, 99] }] },
-  { name: "Pick Dodger", cat: "Defense", h: [ft("5'9"), ft("6'10")], attrs: [
-    { stat: "Perimeter Defense", t: [73, 83, 90, 97, 99] }, { stat: "Agility", t: [71, 75, 79, 85, 92] }] },
-  { name: "Post Lockdown", cat: "Defense", h: [ft("6'5"), ft("7'4")], attrs: [
-    { stat: "Interior Defense", t: [74, 82, 88, 93, 99] }, { stat: "Strength", t: [70, 78, 84, 92, 97] }] },
-  // Rebounding
-  { name: "Boxout Beast", any: true, cat: "Rebounding", h: [ft("6'3"), ft("7'4")], attrs: [
-    { stat: "Offensive Rebound", t: [55, 70, 85, 94, 98] }, { stat: "Defensive Rebound", t: [55, 70, 85, 94, 98] }] },
-  { name: "Rebound Chaser", any: true, cat: "Rebounding", h: [ft("5'9"), ft("7'4")], attrs: [
-    { stat: "Offensive Rebound", t: [60, 80, 92, 96, 99] }, { stat: "Defensive Rebound", t: [60, 80, 92, 96, 99] }] },
-  // General / Athleticism
-  { name: "Brick Wall", cat: "General", h: [ft("6'5"), ft("7'4")], attrs: [
-    { stat: "Strength", t: [72, 83, 91, 95, 99] }] },
-  { name: "Slippery Off-Ball", cat: "General", h: [ft("5'9"), ft("6'9")], attrs: [
-    { stat: "Speed", t: [57, 73, 85, 92, 99] }, { stat: "Agility", t: [57, 65, 77, 88, 96] }] },
-  { name: "Pogo Stick", cat: "General", h: [ft("6'4"), ft("7'4")], attrs: [
-    { stat: "Vertical", t: [63, 70, 77, 83, 88] }] },
-];
-
-function attrTier(value, t) {
-  for (let i = 4; i >= 0; i--) if (t[i] != null && value >= t[i]) return i + 1;
-  return 0;
-}
-
-// No 2K badge is defined above 7'4" or below 5'9" — clamp into that band
-// before evaluating badges, rather than letting a maxed-height player (BBGM
-// Hgt near 100 → 7'6"+) fall outside every badge's real height range and be
-// marked N/A across the board.
-const BADGE_H_MIN = Math.min(...BADGES.map(b => b.h[0]));
-const BADGE_H_MAX = Math.max(...BADGES.map(b => b.h[1]));
-
-function calcBadges(conv) {
-  const hIn = Math.max(BADGE_H_MIN, Math.min(BADGE_H_MAX, conv.heightIn));
-  return BADGES.map(b => {
-    const eligible = hIn >= b.h[0] - 1 && hIn <= b.h[1] + 1;
-    // any:true → alternative requirements (best attribute counts, e.g. Deadeye
-    // works off Midrange OR 3PT); otherwise all attributes must qualify (weakest link)
-    let tier = b.any ? 0 : 5;
-    for (const a of b.attrs) {
-      const t = attrTier(conv.k2[a.stat], a.t);
-      tier = b.any ? Math.max(tier, t) : Math.min(tier, t);
-    }
-    if (!eligible) tier = 0;
-    return { name: b.name, cat: b.cat, tier, tierName: TIERS[tier], eligible,
-      detail: b.attrs.map(a => `${a.stat} ${Math.round(conv.k2[a.stat])}`).join(", ") };
-  });
-}
-
-function badgeClass(tier) {
-  return tier >= 3 ? "s-good" : tier >= 1 ? "s-ok" : "s-bad";
-}
-
-// ---------- Single-player UI ----------
+// ---------- Single-player inputs ----------
 const inputsDiv = document.getElementById("inputs");
 for (const s of BBGM_STATS) {
   const d = document.createElement("div");
@@ -506,26 +365,13 @@ for (const s of BBGM_STATS) {
   inputsDiv.appendChild(d);
 }
 
-// ---------- Persistence: localStorage + shareable URL state ----------
-// URL params use lowercased BBGM stat names (hgt, stre, spd, ...) plus `top`
-// for the results-per-player setting, so a link like ?hgt=47&stre=55&...
-// reproduces the exact same calculation for anyone it's shared with.
-const LS_PLAYER_KEY = "bbgm2k:lastPlayer";
-const LS_TOPN_KEY = "bbgm2k:topN";
-const topNSel = document.getElementById("topN");
-
-function getTopN() {
-  const v = parseInt(topNSel.value, 10);
-  return v === 0 ? Infinity : v;
-}
-
+function getTopN() { const v = parseInt(topNSel.value, 10); return v === 0 ? Infinity : v; }
 function bbgmToParams(bbgm) {
   const p = new URLSearchParams();
   for (const s of BBGM_STATS) p.set(s.toLowerCase(), bbgm[s]);
   if (topNSel.value !== "3") p.set("top", topNSel.value);
   return p;
 }
-
 function bbgmFromParams(params) {
   const bbgm = {};
   for (const s of BBGM_STATS) {
@@ -535,30 +381,21 @@ function bbgmFromParams(params) {
   }
   return bbgm;
 }
-
-function fillInputs(bbgm) {
-  BBGM_STATS.forEach(s => { document.getElementById("in_" + s).value = bbgm[s]; });
-}
+function fillInputs(bbgm) { BBGM_STATS.forEach(s => { document.getElementById("in_" + s).value = bbgm[s]; }); }
 
 (function initFromUrlOrStorage() {
   const params = new URLSearchParams(location.search);
   if (params.has("top") && ["3","5","10","0"].includes(params.get("top"))) topNSel.value = params.get("top");
-  else { const savedTop = localStorage.getItem(LS_TOPN_KEY); if (savedTop) topNSel.value = savedTop; }
-
+  else { const savedTop = store.get(LS_TOPN_KEY); if (savedTop) topNSel.value = savedTop; }
   const fromUrl = bbgmFromParams(params);
-  if (fromUrl) {
-    fillInputs(fromUrl);
-    // A link is shared to show a result, not just prefill the form.
-    setTimeout(() => document.getElementById("btnCalc").click(), 0);
-    return;
-  }
+  if (fromUrl) { fillInputs(fromUrl); setTimeout(() => document.getElementById("btnCalc").click(), 0); return; }
   try {
-    const saved = JSON.parse(localStorage.getItem(LS_PLAYER_KEY) || "null");
+    const saved = JSON.parse(store.get(LS_PLAYER_KEY) || "null");
     if (saved && BBGM_STATS.every(s => typeof saved[s] === "number")) fillInputs(saved);
   } catch { /* ignore malformed storage */ }
 })();
 
-topNSel.addEventListener("change", () => localStorage.setItem(LS_TOPN_KEY, topNSel.value));
+topNSel.addEventListener("change", () => { store.set(LS_TOPN_KEY, topNSel.value); rerunAll(); });
 
 document.getElementById("pasteRow").addEventListener("input", e => {
   const need = BBGM_STATS.length;
@@ -569,31 +406,111 @@ document.getElementById("pasteRow").addEventListener("input", e => {
     hint.textContent = `Found ${nums.length} number${nums.length === 1 ? "" : "s"}, need at least ${need} (Hgt → Reb).`;
     return;
   }
-  // A raw BBGM ratings-table row carries extra leading columns (Ovr, Pot,
-  // Age, Contract, ...) before the trailing Hgt → Reb block — take the last
-  // `need` numbers rather than requiring an exact count.
   const trimmed = nums.slice(nums.length - need);
   BBGM_STATS.forEach((s, i) => document.getElementById("in_" + s).value = trimmed[i]);
-  hint.textContent = nums.length > need
-    ? `Found ${nums.length} numbers — using the last ${need} (Hgt → Reb).`
-    : "";
+  hint.textContent = nums.length > need ? `Found ${nums.length} numbers — using the last ${need} (Hgt → Reb).` : "";
 });
 
-// Enter anywhere in the single-player form runs the calculation
+// Enter runs the calculation — but not inside the textarea, where it's needed
+// to paste or type multi-line content.
 document.getElementById("singleCard").addEventListener("keydown", e => {
-  if (e.key === "Enter" && e.target.tagName !== "BUTTON") {
-    e.preventDefault();
-    document.getElementById("btnCalc").click();
-  }
+  if (e.key !== "Enter") return;
+  const t = e.target;
+  if (t.tagName === "BUTTON" || t.tagName === "TEXTAREA" || t.tagName === "SELECT") return;
+  e.preventDefault();
+  document.getElementById("btnCalc").click();
 });
 
-function scoreClass(s) { return s >= 80 ? "s-good" : s >= 60 ? "s-ok" : "s-bad"; }
-function scoreLabel(s) { return s >= 80 ? "Strong fit" : s >= 60 ? "Moderate fit" : s >= 20 ? "Loose fit" : "Weak fit"; }
-function esc(s) { return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+// ---------- Rendering helpers ----------
+// A build's requirement band and the player's value on the same 0-100 percentile
+// scale: the single biggest readability win over three names and a number.
+function fitChart(detail) {
+  let h = `<div class="hint">Player value (line) vs the build's required range (band). Red marks how far short the player falls. Scale is percentile.</div>`;
+  for (const d of detail) {
+    const clamp = v => Math.max(0, Math.min(100, v));
+    const lo = clamp(d.lo), hi = clamp(d.hi), v = clamp(d.value);
+    const cls = d.deficit > 10 ? "s-bad" : d.deficit > 0 ? "s-ok" : "";
+    h += `<div class="fitrow"><div>${esc(d.stat)}</div>` +
+      `<div class="fitbar"><div class="band" style="left:${lo}%;width:${Math.max(1, hi - lo)}%"></div>` +
+      (d.deficit > 0 ? `<div class="miss" style="left:${v}%;width:${Math.max(1, lo - v)}%"></div>` : "") +
+      `<div class="dot" style="left:${v}%"></div></div>` +
+      `<div class="${cls}">${Math.round(d.k2)} <span class="hint">/ ${d.needK2}</span></div></div>`;
+  }
+  return h;
+}
+
+function badgeSection(badges) {
+  const earned = badges.filter(b => b.tier > 0);
+  const points = badges.reduce((a, b) => a + b.points, 0);
+  const byCat = {};
+  for (const b of badges) (byCat[b.cat] = byCat[b.cat] || []).push(b);
+  const rows = list => list.sort((a, b) => b.tier - a.tier).map(b =>
+    `<tr><td>${esc(b.name)}</td><td class="score tier-${b.tier}">${b.eligible ? esc(b.tierName) : "N/A (height)"}</td>` +
+    `<td class="hint">${esc(b.detail)}</td></tr>`).join("");
+  let h = `<details open><summary>2K badges — ${earned.length} earned, ${points} badge points (${esc(E.BADGE_VERSION)})</summary>`;
+  h += `<div class="hint">Earned badges by category. "Show all" includes the ones not reached.</div>`;
+  for (const [cat, list] of Object.entries(byCat)) {
+    const e = list.filter(b => b.tier > 0);
+    if (!e.length) continue;
+    h += `<h3>${esc(cat)} <span class="hint">(${e.length}/${list.length})</span></h3>` +
+      `<div class="scroll"><table><tbody>${rows(e)}</tbody></table></div>`;
+  }
+  if (!earned.length) h += `<div class="hint">No badges earned.</div>`;
+  h += `<details><summary>Show all ${badges.length} badges</summary><div class="scroll"><table><thead><tr>` +
+    `<th>Badge</th><th>Category</th><th>Level</th><th>Basis</th></tr></thead><tbody>` +
+    badges.slice().sort((a, b) => b.tier - a.tier).map(b =>
+      `<tr><td>${esc(b.name)}</td><td>${esc(b.cat)}</td><td class="score tier-${b.tier}">` +
+      `${b.eligible ? esc(b.tierName) : "N/A (height)"}</td><td class="hint">${esc(b.detail)}</td></tr>`).join("") +
+    `</tbody></table></div></details></details>`;
+  return h;
+}
+
+function resultHtml(bbgm, conv, result, opts) {
+  opts = opts || {};
+  const badges = E.calcBadges(conv);
+  const hIn = Math.round(conv.heightIn);
+  let html = "";
+  if (result.quality !== "ok") {
+    html += `<div class="banner ${result.quality === "none" ? "bad" : ""}">${esc(result.qualityNote)}</div>`;
+  }
+  html += `<div class="hint" style="margin-top:.75rem">Converted height: ~${Math.floor(hIn / 12)}'${hIn % 12}"` +
+    ` · Conditioning: ${Math.round(conv.enduPctl)}th percentile endurance (not modeled by any 2K attribute — it sustains minutes rather than raising any rating).</div>`;
+  if (result.heightClamped) {
+    const dir = conv.heightIn > E.DB_H_MAX ? "above" : "below";
+    html += `<div class="hint">Height clamped to ${E.fmtH(result.heightUsedIn)} for matching — no 2K build exists ${dir} this.</div>`;
+  }
+  if (result.heightPoolRelaxed) html += `<div class="hint">No build covers this height; the nearest-height builds are shown.</div>`;
+  html += `<div class="hint">Fit gap: <strong>${result.bestPen.toFixed(1)}</strong> penalty points — comparable across players (0 = the player sits fully inside the #1 build's ranges).` +
+    (result.tieCount > 3
+      ? ` ${result.tieCount} builds sit within ${E.CONSTANTS.TIE_BAND} points of the winner, so the top pick is close to a coin flip — pick on flavour.`
+      : ` Only ${result.tieCount} build${result.tieCount === 1 ? "" : "s"} within ${E.CONSTANTS.TIE_BAND} points — a clear match.`) + `</div>`;
+  html += `<div class="match">`;
+  result.matches.forEach((m, i) => {
+    const gaps = m.gaps.length
+      ? `<div class="hint">Weak at: ${esc(m.gaps.join(", "))}</div>`
+      : `<div class="hint s-good">No significant skill gaps</div>`;
+    const strong = m.strengths.length ? `<div class="hint">Chosen for: ${esc(m.strengths.join(", "))}</div>` : "";
+    html += `<div class="match-card"><div class="rank">#${i + 1} match</div>
+      <div class="name">${esc(m.name)}</div>
+      <div class="meta">${esc(m.pos)} · ${esc(m.height)}</div>
+      <div class="score ${m.grade.cls}">${esc(m.grade.label)} — gap ${m.gapPts.toFixed(1)}</div>
+      <div class="hint">#${m.rank} of ${result.poolSize} eligible builds</div>
+      ${strong}${gaps}
+      <details><summary>Why?</summary>${fitChart(E.matchDetail(conv, m.ai))}</details></div>`;
+  });
+  html += `</div>`;
+  html += `<details style="margin-top:.75rem"><summary>Converted 2K ratings</summary><div class="scroll"><table><thead><tr>` +
+    E.STAT_NAMES.map(s => `<th>${esc(s)}</th>`).join("") + `</tr></thead><tbody><tr>` +
+    E.STAT_NAMES.map(s => `<td>${Math.round(conv.k2[s])}</td>`).join("") + `</tr></tbody></table></div></details>`;
+  html += badgeSection(badges);
+  if (opts.projection) html += opts.projection;
+  return html;
+}
 
 document.getElementById("btnCalc").addEventListener("click", () => {
   const err = document.getElementById("singleErr"), out = document.getElementById("singleOut");
   err.style.display = "none"; out.innerHTML = "";
+  applyHeightScale();
   const bbgm = {};
   for (const s of BBGM_STATS) {
     const v = parseFloat(document.getElementById("in_" + s).value);
@@ -601,53 +518,14 @@ document.getElementById("btnCalc").addEventListener("click", () => {
     if (v < 0 || v > 100) { err.textContent = `${s} must be between 0 and 100.`; err.style.display = "block"; return; }
     bbgm[s] = v;
   }
-  localStorage.setItem(LS_PLAYER_KEY, JSON.stringify(bbgm));
-  const params = bbgmToParams(bbgm);
-  history.replaceState(null, "", location.pathname + "?" + params.toString());
+  store.set(LS_PLAYER_KEY, JSON.stringify(bbgm));
+  history.replaceState(null, "", location.pathname + "?" + bbgmToParams(bbgm).toString());
   document.getElementById("btnCopyLink").style.display = "inline-block";
-  const conv = convertPlayer(bbgm);
-  const result = matchArchetypes(conv, getTopN());
-  const matches = result.matches;
-  const hIn = Math.round(conv.heightIn);
-  let html = `<div class="hint" style="margin-top:.75rem">Converted height: ~${Math.floor(hIn/12)}'${hIn%12}"</div>`;
-  if (result.heightClamped) {
-    const dir = conv.heightIn > DB_H_MAX ? "above" : "below";
-    html += `<div class="hint">Height clamped to ${fmtH(result.heightUsedIn)} for archetype matching — no 2K build exists ${dir} this.</div>`;
-  }
-  html += `<div class="hint">Conditioning: ${Math.round(conv.enduPctl)}th percentile endurance (not modeled by any 2K attribute directly — sustains effort/minutes on court).</div>`;
-  html += `<div class="hint">Best-fit gap: ${result.bestPen.toFixed(1)} penalty points (lower = closer to a real build; 0 means the player sits fully inside the #1 match's ranges). The %-fit below ranks builds against each other for <em>this player</em>, so it isn't comparable across different players — this number is.</div>`;
-  if (result.bestPen >= 15) {
-    html += `<div class="hint">No 2K build is really built this low — the closest shape is shown below, but expect large skill gaps.</div>`;
-  }
-  html += `<div class="match">`;
-  matches.forEach((m, i) => {
-    const gaps = m.gaps.length
-      ? `<div class="hint">Skill gaps: ${esc(m.gaps.join(", "))}</div>`
-      : `<div class="hint s-good">No significant skill gaps</div>`;
-    html += `<div class="match-card"><div class="rank">#${i+1} match</div>
-      <div class="name">${esc(m.name)}</div>
-      <div class="meta">${esc(m.pos)} · ${esc(m.height)}</div>
-      <div class="score ${scoreClass(m.score)}">${m.score}% fit — ${scoreLabel(m.score)}</div>${gaps}</div>`;
-  });
-  html += `</div><details style="margin-top:.75rem"><summary>Converted 2K ratings</summary><div class="scroll"><table><thead><tr>` +
-    ARCHETYPE_DATA.statNames.map(s => `<th>${esc(s)}</th>`).join("") + `</tr></thead><tbody><tr>` +
-    ARCHETYPE_DATA.statNames.map(s => `<td>${Math.round(conv.k2[s])}</td>`).join("") + `</tr></tbody></table></div></details>`;
-
-  const badges = calcBadges(conv);
-  const earned = badges.filter(b => b.tier > 0).sort((a, b2) => b2.tier - a.tier);
-  html += `<details open style="margin-top:.75rem"><summary>2K Badges (${earned.length} earned)</summary><div class="scroll"><table><thead><tr>` +
-    `<th>Badge</th><th>Category</th><th>Level</th><th>Basis</th></tr></thead><tbody>`;
-  for (const b of badges.sort((a, b2) => b2.tier - a.tier)) {
-    html += `<tr><td>${esc(b.name)}</td><td>${esc(b.cat)}</td>` +
-      `<td class="score ${badgeClass(b.tier)}">${b.eligible ? esc(b.tierName) : "N/A (height)"}</td>` +
-      `<td class="hint">${esc(b.detail)}</td></tr>`;
-  }
-  html += `</tbody></table></div></details>`;
-  out.innerHTML = html;
+  const conv = E.convertPlayer(bbgm, convOpts());
+  out.innerHTML = resultHtml(bbgm, conv, E.matchArchetypes(conv, getTopN(), matchOpts()));
 });
 
 document.getElementById("btnSample").addEventListener("click", () => {
-  // A real row from PlayerRatings_sample.csv (Hgt -> Reb block).
   document.getElementById("pasteRow").value = "34 74 98 82 79 75 55 94 100 100 76 79 95 94 58";
   document.getElementById("pasteRow").dispatchEvent(new Event("input"));
 });
@@ -659,9 +537,7 @@ document.getElementById("btnCopyLink").addEventListener("click", async e => {
     const old = btn.textContent;
     btn.textContent = "Copied!";
     setTimeout(() => { btn.textContent = old; }, 1500);
-  } catch {
-    window.prompt("Copy this link:", location.href);
-  }
+  } catch { window.prompt("Copy this link:", location.href); }
 });
 
 document.getElementById("btnClear").addEventListener("click", () => {
@@ -673,26 +549,34 @@ document.getElementById("btnClear").addEventListener("click", () => {
   history.replaceState(null, "", location.pathname);
 });
 
-// ---------- CSV batch UI ----------
+// ---------- CSV parsing ----------
 const HEADER_ALIASES = {
   hgt:"Hgt", str:"Stre", stre:"Stre", spd:"Spd", jmp:"Jmp", end:"Endu", endu:"Endu",
   ins:"Ins", dnk:"Dnk", ft:"FT", "2pt":"Mid", mid:"Mid", "3pt":"TP", tp:"TP",
   oiq:"OIQ", diq:"DIQ", drb:"Drb", pss:"Pss", reb:"Reb",
 };
 
-function parseCSV(text) {
+function detectDelimiter(text) {
+  const line = text.replace(/^﻿/, "").split(/\r?\n/)[0] || "";
+  const counts = [[",", 0], [";", 0], ["\t", 0]].map(([d]) => [d, line.split(d).length - 1]);
+  counts.sort((a, b) => b[1] - a[1]);
+  return counts[0][1] > 0 ? counts[0][0] : ",";
+}
+
+function parseCSV(text, delim) {
+  const D = delim || ",";
   const rows = [];
   let row = [], field = "", inQ = false;
   text = text.replace(/^﻿/, "");
   for (let i = 0; i < text.length; i++) {
     const c = text[i];
     if (inQ) {
-      if (c === '"') { if (text[i+1] === '"') { field += '"'; i++; } else inQ = false; }
+      if (c === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else inQ = false; }
       else field += c;
     } else if (c === '"') inQ = true;
-    else if (c === ",") { row.push(field); field = ""; }
+    else if (c === D) { row.push(field); field = ""; }
     else if (c === "\n" || c === "\r") {
-      if (c === "\r" && text[i+1] === "\n") i++;
+      if (c === "\r" && text[i + 1] === "\n") i++;
       row.push(field); field = "";
       if (row.some(f => f !== "")) rows.push(row);
       row = [];
@@ -703,79 +587,276 @@ function parseCSV(text) {
   return rows;
 }
 
-let batchResults = null;   // full unfiltered/unsorted results for the last run
-let batchSkipped = 0;
+// ---------- Batch ----------
+let lastBatchRows = null;      // parsed input rows, kept so settings changes can re-run
+let batchResults = null;
+let batchSkips = [];
 let batchSort = { key: null, dir: 1 };
 let batchPage = 0;
 const BATCH_PAGE_SIZE = 50;
-const BATCH_CHUNK = 150;   // rows processed per tick before yielding to the UI thread
+const BATCH_CHUNK = 150;
+const LS_BATCH_KEY = "bbgm2k:lastBatch";
 
 function showBatchErr(msg) {
-  const errEl = document.getElementById("batchErr");
-  errEl.textContent = msg;
-  errEl.style.display = "block";
+  const el = document.getElementById("batchErr");
+  el.textContent = msg; el.style.display = "block";
+}
+
+function parseRoster(text) {
+  const rows = parseCSV(text, detectDelimiter(text));
+  if (rows.length < 2) return { err: "CSV appears to be empty." };
+  const header = rows[0].map(h => h.trim());
+  const colFor = {};
+  const dupes = [];
+  let nameCol = -1, posCol = -1, teamCol = -1, ovrCol = -1, potCol = -1, ageCol = -1;
+  header.forEach((h, i) => {
+    const k = h.toLowerCase();
+    if (k === "name") nameCol = i;
+    else if (k === "pos") posCol = i;
+    else if (k === "team" || k === "tid") teamCol = i;
+    else if (k === "ovr") ovrCol = i;
+    else if (k === "pot") potCol = i;
+    else if (k === "age") ageCol = i;
+    else if (HEADER_ALIASES[k]) {
+      if (colFor[HEADER_ALIASES[k]] === undefined) colFor[HEADER_ALIASES[k]] = i;
+      else dupes.push(h);
+    }
+  });
+  const missing = BBGM_STATS.filter(s => colFor[s] === undefined);
+  if (missing.length) return { err: "Missing columns: " + missing.join(", ") };
+  const players = [], skips = [];
+  for (let r = 1; r < rows.length; r++) {
+    const bbgm = {};
+    let bad = null;
+    for (const s of BBGM_STATS) {
+      const raw = rows[r][colFor[s]];
+      const v = parseFloat(raw);
+      if (isNaN(v)) { bad = `${s} is not a number ("${String(raw).slice(0, 12)}")`; break; }
+      if (v < 0 || v > 100) { bad = `${s}=${v} is outside 0–100`; break; }
+      bbgm[s] = v;
+    }
+    const nm = nameCol >= 0 && rows[r][nameCol] ? rows[r][nameCol] : `Row ${r}`;
+    if (bad) { skips.push({ row: r, name: nm, why: bad }); continue; }
+    const num = i => { const v = i >= 0 ? parseFloat(rows[r][i]) : NaN; return isNaN(v) ? null : v; };
+    players.push({
+      name: nm,
+      pos: posCol >= 0 && rows[r][posCol] ? rows[r][posCol] : "",
+      team: teamCol >= 0 && rows[r][teamCol] ? rows[r][teamCol] : "",
+      ovr: num(ovrCol), pot: num(potCol), age: num(ageCol),
+      bbgm,
+    });
+  }
+  return { players, skips, dupes };
+}
+
+// Peak projection: BBGM's Pot/Ovr spread says how much room a player has left,
+// so scaling his improvable ratings by that spread gives the archetype he's
+// trending toward. Physical/height ratings are left alone.
+const PROJECTABLE = ["Ins","Dnk","FT","Mid","TP","OIQ","DIQ","Drb","Pss","Reb"];
+function projectPeak(bbgm, ovr, pot) {
+  if (ovr == null || pot == null || pot <= ovr) return null;
+  const lift = Math.min(25, (pot - ovr));
+  const out = Object.assign({}, bbgm);
+  for (const s of PROJECTABLE) out[s] = Math.min(100, Math.round(bbgm[s] + lift * 0.8));
+  return out;
+}
+
+function computeOne(p) {
+  const conv = E.convertPlayer(p.bbgm, convOpts());
+  const r = E.matchArchetypes(conv, getTopN(), matchOpts(p.pos));
+  const out = {
+    name: p.name, pos: p.pos, team: p.team, ovr: p.ovr, pot: p.pot, age: p.age,
+    bbgm: p.bbgm, matches: r.matches, bestPen: r.bestPen, grade: r.grade,
+    quality: r.quality, tieCount: r.tieCount, heightClamped: r.heightClamped,
+    badgePoints: E.calcBadges(conv).reduce((a, b) => a + b.points, 0),
+    k2: conv.k2,
+  };
+  const peak = projectPeak(p.bbgm, p.ovr, p.pot);
+  if (peak) {
+    const pc = E.convertPlayer(peak, convOpts());
+    const pr = E.matchArchetypes(pc, 1, matchOpts(p.pos));
+    out.peak = pr.matches[0] ? pr.matches[0].name : null;
+  }
+  return out;
+}
+
+async function recomputeBatch() {
+  if (!lastBatchRows) return;
+  await runPlayers(lastBatchRows.players, lastBatchRows.skips, lastBatchRows.dupes);
+}
+
+async function runBatch(text) {
+  document.getElementById("batchErr").style.display = "none";
+  document.getElementById("batchOut").innerHTML =
+    `<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>`;
+  const parsed = parseRoster(text);
+  if (parsed.err) { document.getElementById("batchOut").innerHTML = ""; showBatchErr(parsed.err); return; }
+  if (!parsed.players.length) {
+    document.getElementById("batchOut").innerHTML = "";
+    showBatchErr(`No valid rating rows found (${parsed.skips.length} row(s) skipped).`);
+    return;
+  }
+  lastBatchRows = parsed;
+  // League-relative calibration becomes available as soon as a roster exists.
+  leagueAnchors = E.deriveAnchors(parsed.players.map(p => p.bbgm));
+  const opt = calibSel.querySelector('option[value="league"]');
+  opt.disabled = !leagueAnchors;
+  opt.textContent = leagueAnchors ? `This league (${parsed.players.length} players)` : "This league (load a roster first)";
+  await runPlayers(parsed.players, parsed.skips, parsed.dupes);
+}
+
+async function runPlayers(players, skips, dupes) {
+  const progress = document.getElementById("batchProgress");
+  const bar = document.getElementById("batchProgressBar");
+  const txt = document.getElementById("batchProgressText");
+  const total = players.length;
+  if (total > BATCH_CHUNK) progress.style.display = "block";
+  const results = [];
+  for (let i = 0; i < total; i++) {
+    results.push(computeOne(players[i]));
+    if (i && i % BATCH_CHUNK === 0) {
+      bar.style.width = Math.round((i / total) * 100) + "%";
+      txt.textContent = `Processing ${i.toLocaleString()} / ${total.toLocaleString()}...`;
+      await new Promise(res => setTimeout(res, 0));
+    }
+  }
+  progress.style.display = "none";
+  txt.textContent = "";
+
+  batchResults = results;
+  batchSkips = skips || [];
+  batchSort = { key: null, dir: 1 };
+  batchPage = 0;
+  document.getElementById("batchControls").style.display = "block";
+  document.getElementById("btnDownload").style.display = "inline-block";
+
+  const warn = document.getElementById("batchWarn");
+  const notes = [];
+  if (batchSkips.length) {
+    notes.push(`${batchSkips.length} row(s) skipped: ` +
+      batchSkips.slice(0, 5).map(s => `${esc(s.name)} (${esc(s.why)})`).join("; ") +
+      (batchSkips.length > 5 ? `; +${batchSkips.length - 5} more` : ""));
+  }
+  if (dupes && dupes.length) notes.push(`Duplicate rating columns ignored: ${esc(dupes.join(", "))}.`);
+  const clamped = results.filter(r => r.heightClamped).length;
+  if (clamped) notes.push(`${clamped} player(s) fall outside the build database's height range and were matched at the nearest supported height.`);
+  warn.innerHTML = notes.join("<br>");
+  warn.style.display = notes.length ? "block" : "none";
+
+  const posSelEl = document.getElementById("batchPos");
+  const positions = [...new Set(results.map(r => r.pos).filter(Boolean))].sort();
+  posSelEl.innerHTML = `<option value="">All</option>` + positions.map(p => `<option>${esc(p)}</option>`).join("");
+
+  // Persist the whole run so a refresh doesn't lose a 900-row batch.
+  try { store.set(LS_BATCH_KEY, JSON.stringify({ players: lastBatchRows.players, skips: batchSkips })); } catch {}
+  renderBatch();
 }
 
 function getFilteredSortedBatch() {
   const q = document.getElementById("batchSearch").value.trim().toLowerCase();
+  const pos = document.getElementById("batchPos").value;
+  const qual = document.getElementById("batchQuality").value;
   let list = batchResults || [];
-  if (q) list = list.filter(p => p.name.toLowerCase().includes(q) || p.pos.toLowerCase().includes(q));
+  if (q) list = list.filter(p => p.name.toLowerCase().includes(q) || (p.pos || "").toLowerCase().includes(q));
+  if (pos) list = list.filter(p => p.pos === pos);
+  if (qual) list = list.filter(p => p.quality === qual);
   if (batchSort.key) {
     const { key, dir } = batchSort;
     list = list.slice().sort((a, b) => {
       let av, bv;
-      if (key === "name") { av = a.name.toLowerCase(); bv = b.name.toLowerCase(); }
-      else if (key === "pos") { av = a.pos.toLowerCase(); bv = b.pos.toLowerCase(); }
-      else if (key === "bestPen") { av = a.bestPen; bv = b.bestPen; }
-      else { av = a.matches[0] ? a.matches[0].score : -1; bv = b.matches[0] ? b.matches[0].score : -1; }
+      if (key === "name" || key === "pos" || key === "team") { av = (a[key] || "").toLowerCase(); bv = (b[key] || "").toLowerCase(); }
+      else if (key === "arch") { av = a.matches[0] ? a.matches[0].name : ""; bv = b.matches[0] ? b.matches[0].name : ""; }
+      else { av = a[key] == null ? -Infinity : a[key]; bv = b[key] == null ? -Infinity : b[key]; }
       return av < bv ? -dir : av > bv ? dir : 0;
     });
   }
   return list;
 }
 
+function diversityLine(list) {
+  const counts = {};
+  for (const p of list) if (p.matches[0]) counts[p.matches[0].name] = (counts[p.matches[0].name] || 0) + 1;
+  const top = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  if (!top.length) return "";
+  const top4 = top.slice(0, 4).reduce((a, b) => a + b[1], 0);
+  return `${top.length} distinct archetypes across ${list.length} players — the top 4 cover ${Math.round(100 * top4 / list.length)}% ` +
+    `(most common: ${esc(top[0][0])}, ${Math.round(100 * top[0][1] / list.length)}%).`;
+}
+
+function renderBatch() {
+  const view = document.getElementById("batchView").value;
+  if (view === "teams") return renderTeams();
+  if (view === "archetypes") return renderArchetypeUsage();
+  renderBatchTable();
+}
+
+const QUALITY_LABEL = { ok: "Clean", relaxed: "Relaxed", none: "No legal build" };
+
 function renderBatchTable() {
   const out = document.getElementById("batchOut");
+  const compact = document.getElementById("batchCompact").checked;
   const filtered = getFilteredSortedBatch();
   const totalPages = Math.max(1, Math.ceil(filtered.length / BATCH_PAGE_SIZE));
   if (batchPage >= totalPages) batchPage = totalPages - 1;
   const pageItems = filtered.slice(batchPage * BATCH_PAGE_SIZE, (batchPage + 1) * BATCH_PAGE_SIZE);
-  const topN = batchResults.length ? Math.max(...batchResults.map(p => p.matches.length)) : 0;
-  const arrow = key => batchSort.key === key ? (batchSort.dir === 1 ? "▲" : "▼") : "";
+  const topN = compact ? 1 : (batchResults.length ? Math.max(...batchResults.map(p => p.matches.length)) : 0);
 
-  let html = `<div class="hint" style="margin-top:.75rem">${batchResults.length} player${batchResults.length === 1 ? "" : "s"} converted${batchSkipped ? `, ${batchSkipped} row${batchSkipped === 1 ? "" : "s"} skipped (missing/invalid ratings)` : ""}${filtered.length !== batchResults.length ? ` — ${filtered.length} shown after filter` : ""}.</div>`;
-  html += `<div class="hint">"Fit gap" is the #1 match's raw penalty (lower = closer to a real build) and is comparable across players; "%" ranks builds against each other for that one player only. Click a column header to sort.</div>`;
-  html += `<table style="margin-top:.5rem"><thead><tr>` +
-    `<th class="sortable" data-key="name">Player <span class="arrow">${arrow("name")}</span></th>` +
-    `<th class="sortable" data-key="pos">Pos <span class="arrow">${arrow("pos")}</span></th>` +
-    `<th class="sortable" data-key="bestPen">Fit gap <span class="arrow">${arrow("bestPen")}</span></th>`;
-  for (let i = 0; i < topN; i++) {
-    html += `<th>${i === 0 ? "Best archetype" : `#${i + 1}`}</th>`;
-    html += i === 0
-      ? `<th class="sortable" data-key="score">% <span class="arrow">${arrow("score")}</span></th>`
-      : `<th>%</th>`;
+  document.getElementById("batchSummary").innerHTML =
+    `${batchResults.length} player(s) converted${filtered.length !== batchResults.length ? `, ${filtered.length} shown` : ""}. ` +
+    diversityLine(filtered) +
+    ` Graded against ${calibSel.value === "league" ? "this league" : "the NBA"}.`;
+
+  if (!filtered.length) {
+    out.innerHTML = `<div class="hint" style="margin-top:.75rem">No players match the current filters.</div>`;
+    document.getElementById("batchPager").style.display = "none";
+    return;
   }
+
+  const th = (key, label) => `<th class="sortable" data-key="${key}" tabindex="0" role="columnheader" ` +
+    `aria-sort="${batchSort.key === key ? (batchSort.dir === 1 ? "ascending" : "descending") : "none"}">` +
+    `${label} <span class="arrow" aria-hidden="true">${batchSort.key === key ? (batchSort.dir === 1 ? "▲" : "▼") : ""}</span></th>`;
+
+  let html = `<div class="hint">Click a row for the full breakdown. "Fit gap" is the raw penalty of the #1 match and is comparable across players.</div>`;
+  html += `<div class="sticky-table" style="margin-top:.5rem"><table><thead><tr>` +
+    th("name", "Player") + th("pos", "Pos") + th("team", "Team") +
+    th("bestPen", "Fit gap") + `<th>Fit</th><th>Quality</th>` + th("badgePoints", "Badge pts");
+  if (!compact) html += th("ovr", "Ovr") + th("pot", "Pot");
+  for (let i = 0; i < topN; i++) html += i === 0 ? th("arch", "Best archetype") : `<th>#${i + 1}</th>`;
+  if (!compact) html += `<th>Peak projection</th>`;
   html += `</tr></thead><tbody>`;
   for (const p of pageItems) {
-    html += `<tr><td>${esc(p.name)}</td><td>${esc(p.pos)}</td><td>${p.bestPen.toFixed(1)}</td>`;
+    const idx = batchResults.indexOf(p);
+    html += `<tr class="clickable${p.quality === "none" ? " warn" : ""}" data-i="${idx}" tabindex="0">` +
+      `<td>${esc(p.name)}</td><td>${esc(p.pos)}</td><td>${esc(p.team || "")}</td>` +
+      `<td>${p.bestPen.toFixed(1)}</td>` +
+      `<td class="score ${p.grade.cls}">${esc(p.grade.label)}</td>` +
+      `<td class="${p.quality === "none" ? "s-bad" : p.quality === "relaxed" ? "s-ok" : "s-good"}">${QUALITY_LABEL[p.quality]}</td>` +
+      `<td>${p.badgePoints}</td>`;
+    if (!compact) html += `<td>${p.ovr == null ? "" : p.ovr}</td><td>${p.pot == null ? "" : p.pot}</td>`;
     for (let i = 0; i < topN; i++) {
       const m = p.matches[i];
-      html += m
-        ? `<td>${esc(m.name)} <span class="hint">(${esc(m.pos)})</span></td><td class="score ${scoreClass(m.score)}" title="${scoreLabel(m.score)}">${m.score}</td>`
-        : `<td></td><td></td>`;
+      html += m ? `<td>${esc(m.name)} <span class="hint">(${esc(m.pos)})</span></td>` : `<td></td>`;
     }
+    if (!compact) html += `<td class="hint">${esc(p.peak || "")}</td>`;
     html += `</tr>`;
   }
-  html += "</tbody></table>";
+  html += `</tbody></table></div>`;
   out.innerHTML = html;
 
-  out.querySelectorAll("th.sortable").forEach(th => {
-    th.addEventListener("click", () => {
-      const key = th.dataset.key;
-      if (batchSort.key === key) batchSort.dir *= -1; else { batchSort = { key, dir: 1 }; }
+  out.querySelectorAll("th.sortable").forEach(el => {
+    const go = () => {
+      const key = el.dataset.key;
+      if (batchSort.key === key) batchSort.dir *= -1; else batchSort = { key, dir: 1 };
       batchPage = 0;
-      renderBatchTable();
-    });
+      renderBatch();
+    };
+    el.addEventListener("click", go);
+    el.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
+  });
+  out.querySelectorAll("tr.clickable").forEach(tr => {
+    const open = () => openDrawer(batchResults[parseInt(tr.dataset.i, 10)]);
+    tr.addEventListener("click", open);
+    tr.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); open(); } });
   });
 
   const pager = document.getElementById("batchPager");
@@ -784,109 +865,91 @@ function renderBatchTable() {
     pager.innerHTML = `<button class="secondary" id="pagerPrev" ${batchPage === 0 ? "disabled" : ""}>Prev</button>` +
       `<span class="hint">Page ${batchPage + 1} of ${totalPages} (${filtered.length} players)</span>` +
       `<button class="secondary" id="pagerNext" ${batchPage >= totalPages - 1 ? "disabled" : ""}>Next</button>`;
-    document.getElementById("pagerPrev").addEventListener("click", () => { batchPage--; renderBatchTable(); });
-    document.getElementById("pagerNext").addEventListener("click", () => { batchPage++; renderBatchTable(); });
-  } else {
-    pager.style.display = "none";
-  }
+    document.getElementById("pagerPrev").addEventListener("click", () => { batchPage--; renderBatch(); });
+    document.getElementById("pagerNext").addEventListener("click", () => { batchPage++; renderBatch(); });
+  } else pager.style.display = "none";
 }
 
-document.getElementById("batchSearch").addEventListener("input", () => { batchPage = 0; renderBatchTable(); });
-
-// Processes CSV text in chunks with a yield back to the UI thread between
-// each one, so a large roster (hundreds+ of players x 1,256 builds) shows
-// progress and keeps the page responsive instead of freezing it.
-async function runBatch(text) {
-  document.getElementById("batchErr").style.display = "none";
-  document.getElementById("batchOut").innerHTML = "";
-  document.getElementById("batchSearchWrap").style.display = "none";
+function renderTeams() {
+  const list = getFilteredSortedBatch();
+  const byTeam = {};
+  for (const p of list) (byTeam[p.team || "(no team)"] = byTeam[p.team || "(no team)"] || []).push(p);
+  document.getElementById("batchSummary").innerHTML = `${Object.keys(byTeam).length} teams. ` + diversityLine(list);
   document.getElementById("batchPager").style.display = "none";
-  document.getElementById("btnDownload").style.display = "none";
-  const progress = document.getElementById("batchProgress");
-  const progressBar = document.getElementById("batchProgressBar");
-  const progressText = document.getElementById("batchProgressText");
-  progress.style.display = "none";
-  progressText.textContent = "";
-
-  const rows = parseCSV(text);
-  if (rows.length < 2) { showBatchErr("CSV appears to be empty."); return; }
-
-  const header = rows[0].map(h => h.trim());
-  const colFor = {};   // BBGM stat -> column index
-  let nameCol = -1, posCol = -1;
-  header.forEach((h, i) => {
-    const k = h.toLowerCase();
-    if (k === "name") nameCol = i;
-    else if (k === "pos") posCol = i;
-    else if (HEADER_ALIASES[k] && colFor[HEADER_ALIASES[k]] === undefined) colFor[HEADER_ALIASES[k]] = i;
-  });
-  const missing = BBGM_STATS.filter(s => colFor[s] === undefined);
-  if (missing.length) { showBatchErr("Missing columns: " + missing.join(", ")); return; }
-
-  const total = rows.length - 1;
-  if (total > BATCH_CHUNK) progress.style.display = "block";
-
-  const results = [];
-  let skipped = 0;
-  const topN = getTopN();
-  for (let r = 1; r < rows.length; r++) {
-    const bbgm = {};
-    let bad = false;
-    for (const s of BBGM_STATS) {
-      const v = parseFloat(rows[r][colFor[s]]);
-      // Same 0-100 range check the single-player form enforces — an
-      // out-of-range value (e.g. a malformed export) is skipped rather than
-      // silently producing a garbage row.
-      if (isNaN(v) || v < 0 || v > 100) { bad = true; break; }
-      bbgm[s] = v;
-    }
-    if (bad) { skipped++; continue; }
-    const r2 = matchArchetypes(convertPlayer(bbgm), topN);
-    const rawName = nameCol >= 0 ? rows[r][nameCol] : undefined;
-    results.push({
-      name: rawName ? rawName : `Row ${r}`,
-      pos: posCol >= 0 && rows[r][posCol] ? rows[r][posCol] : "",
-      matches: r2.matches,
-      bestPen: r2.bestPen,
-    });
-    if (r % BATCH_CHUNK === 0) {
-      progressBar.style.width = Math.round((r / total) * 100) + "%";
-      progressText.textContent = `Processing ${r.toLocaleString()} / ${total.toLocaleString()}...`;
-      await new Promise(res => setTimeout(res, 0));
-    }
+  let html = `<div class="hint">Archetype composition per team — repeated builds are flagged as redundancy.</div>`;
+  html += `<div class="sticky-table" style="margin-top:.5rem"><table><thead><tr><th>Team</th><th>Players</th><th>Distinct builds</th><th>Redundancy</th><th>Avg badge pts</th><th>Composition</th></tr></thead><tbody>`;
+  for (const [team, players] of Object.entries(byTeam).sort()) {
+    const counts = {};
+    for (const p of players) if (p.matches[0]) counts[p.matches[0].name] = (counts[p.matches[0].name] || 0) + 1;
+    const dupes = Object.entries(counts).filter(([, n]) => n > 1).sort((a, b) => b[1] - a[1]);
+    const avg = Math.round(players.reduce((a, p) => a + p.badgePoints, 0) / players.length);
+    html += `<tr><td>${esc(team)}</td><td>${players.length}</td><td>${Object.keys(counts).length}</td>` +
+      `<td class="${dupes.length ? "s-ok" : "s-good"}">${dupes.length ? esc(dupes.map(([n, c]) => `${c}× ${n}`).join(", ")) : "none"}</td>` +
+      `<td>${avg}</td><td style="white-space:normal">${Object.keys(counts).map(n => `<span class="chip">${esc(n)}</span>`).join("")}</td></tr>`;
   }
-  progress.style.display = "none";
-  progressText.textContent = "";
-
-  if (!results.length) { showBatchErr("No valid rating rows found."); return; }
-
-  batchResults = results;
-  batchSkipped = skipped;
-  batchSort = { key: null, dir: 1 };
-  batchPage = 0;
-  document.getElementById("batchSearch").value = "";
-  document.getElementById("batchSearchWrap").style.display = results.length > 10 ? "block" : "none";
-  renderBatchTable();
-  document.getElementById("btnDownload").style.display = "inline-block";
+  html += `</tbody></table></div>`;
+  document.getElementById("batchOut").innerHTML = html;
 }
 
+function renderArchetypeUsage() {
+  const list = getFilteredSortedBatch();
+  const counts = {};
+  for (const p of list) if (p.matches[0]) (counts[p.matches[0].name] = counts[p.matches[0].name] || []).push(p.name);
+  const rows = Object.entries(counts).sort((a, b) => b[1].length - a[1].length);
+  document.getElementById("batchSummary").innerHTML = diversityLine(list) +
+    ` ${rows.length} of ${E.ARCHETYPES.length} builds in the database were used at least once.`;
+  document.getElementById("batchPager").style.display = "none";
+  let html = `<div class="sticky-table" style="margin-top:.5rem"><table><thead><tr><th>Archetype</th><th>Players</th><th>Share</th><th>Examples</th></tr></thead><tbody>`;
+  for (const [name, players] of rows) {
+    html += `<tr><td>${esc(name)}</td><td>${players.length}</td><td>${(100 * players.length / list.length).toFixed(1)}%</td>` +
+      `<td class="hint" style="white-space:normal">${esc(players.slice(0, 4).join(", "))}${players.length > 4 ? ", …" : ""}</td></tr>`;
+  }
+  html += `</tbody></table></div>`;
+  document.getElementById("batchOut").innerHTML = html;
+}
+
+["batchSearch", "batchPos", "batchQuality", "batchCompact"].forEach(id =>
+  document.getElementById(id).addEventListener("input", () => { batchPage = 0; renderBatch(); }));
+document.getElementById("batchView").addEventListener("change", () => { batchPage = 0; renderBatch(); });
+
+// ---------- Drawer: full single-player breakdown from a batch row ----------
+const drawer = document.getElementById("drawer");
+function openDrawer(p) {
+  if (!p) return;
+  const conv = E.convertPlayer(p.bbgm, convOpts());
+  const result = E.matchArchetypes(conv, Math.max(3, Number.isFinite(getTopN()) ? getTopN() : 5), matchOpts(p.pos));
+  let extra = "";
+  if (p.peak) extra = `<div class="hint">Peak projection (from Ovr ${p.ovr} → Pot ${p.pot}): <strong>${esc(p.peak)}</strong></div>`;
+  document.getElementById("drawerBody").innerHTML =
+    `<h2 style="margin-top:.75rem">${esc(p.name)}</h2>` +
+    `<div class="hint">${esc(p.pos || "")} ${esc(p.team || "")}${p.ovr != null ? ` · Ovr ${p.ovr}` : ""}${p.pot != null ? ` · Pot ${p.pot}` : ""}${p.age != null ? ` · age ${p.age}` : ""}</div>` +
+    extra + resultHtml(p.bbgm, conv, result);
+  drawer.classList.add("open");
+  document.getElementById("drawerClose").focus();
+}
+function closeDrawer() { drawer.classList.remove("open"); }
+document.getElementById("drawerClose").addEventListener("click", closeDrawer);
+drawer.addEventListener("click", e => { if (e.target === drawer) closeDrawer(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeDrawer(); });
+
+// ---------- Batch input plumbing ----------
 document.getElementById("csvFile").addEventListener("change", async e => {
   const file = e.target.files[0];
   if (!file) return;
   await runBatch(await file.text());
-  // Reset so re-selecting the same file (e.g. after fixing it and re-exporting
-  // under the same name) fires 'change' again instead of going silent.
   e.target.value = "";
 });
 
 const dropzone = document.getElementById("dropzone");
-["dragenter", "dragover"].forEach(evt => dropzone.addEventListener(evt, e => {
-  e.preventDefault(); dropzone.classList.add("drag");
-}));
-["dragleave", "drop"].forEach(evt => dropzone.addEventListener(evt, e => {
-  e.preventDefault(); dropzone.classList.remove("drag");
-}));
+// dragleave fires when the pointer crosses into a child element, so a plain
+// add/remove pair makes the highlight flicker — count enter/leave instead.
+let dragDepth = 0;
+dropzone.addEventListener("dragenter", e => { e.preventDefault(); dragDepth++; dropzone.classList.add("drag"); });
+dropzone.addEventListener("dragover", e => { e.preventDefault(); });
+dropzone.addEventListener("dragleave", e => { e.preventDefault(); if (--dragDepth <= 0) { dragDepth = 0; dropzone.classList.remove("drag"); } });
 dropzone.addEventListener("drop", async e => {
+  e.preventDefault();
+  dragDepth = 0; dropzone.classList.remove("drag");
   const file = e.dataTransfer.files && e.dataTransfer.files[0];
   if (!file) return;
   await runBatch(await file.text());
@@ -899,43 +962,97 @@ document.getElementById("btnParsePaste").addEventListener("click", async () => {
 });
 
 document.getElementById("btnSampleRoster").addEventListener("click", async () => {
+  if (location.protocol === "file:") {
+    showBatchErr("The sample roster can't be fetched from a file:// URL — browsers block it. " +
+      "Open docs/PlayerRatings_sample.csv yourself with the file picker above, paste its contents into the box, " +
+      "or serve the folder (python3 -m http.server) and reload.");
+    return;
+  }
   try {
-    // Served from docs/ itself (not ../data/) so it's reachable when GitHub
-    // Pages publishes only the docs/ folder, per this repo's own setup steps.
     const res = await fetch("PlayerRatings_sample.csv");
     if (!res.ok) throw new Error(String(res.status));
     await runBatch(await res.text());
   } catch {
-    showBatchErr("Couldn't load the sample roster (docs/PlayerRatings_sample.csv). " +
-      "If you opened this page directly from disk (a file:// URL), your browser may " +
-      "block loading sibling files — try GitHub Pages or a local server instead.");
+    showBatchErr("Couldn't load docs/PlayerRatings_sample.csv. Upload or paste it instead.");
   }
 });
 
 document.getElementById("btnDownload").addEventListener("click", () => {
   if (!batchResults || !batchResults.length) return;
-  const q = s => `"${String(s).replace(/"/g, '""')}"`;
+  const q = s => `"${String(s == null ? "" : s).replace(/"/g, '""')}"`;
   const maxN = Math.max(...batchResults.map(p => p.matches.length));
-  let header = "Name,Pos,FitGap";
-  for (let i = 0; i < maxN; i++) header += `,Archetype${i + 1},Pos${i + 1},Score${i + 1}`;
-  let csv = header + "\n";
+  const statCols = E.STAT_NAMES;
+  let header = ["Name", "Pos", "Team", "Age", "Ovr", "Pot", "FitGap", "FitGrade", "FitQuality", "TiedBuilds", "BadgePoints", "PeakArchetype"];
+  for (let i = 0; i < maxN; i++) header.push(`Archetype${i + 1}`, `Pos${i + 1}`, `Gap${i + 1}`, `Grade${i + 1}`, `TopGaps${i + 1}`);
+  header = header.concat(statCols.map(s => "2K " + s));
+  let csv = header.join(",") + "\n";
   for (const p of batchResults) {
-    const cells = [q(p.name), q(p.pos), p.bestPen];
+    const cells = [q(p.name), q(p.pos), q(p.team), p.age ?? "", p.ovr ?? "", p.pot ?? "",
+      p.bestPen, q(p.grade.label), q(QUALITY_LABEL[p.quality]), p.tieCount, p.badgePoints, q(p.peak || "")];
     for (let i = 0; i < maxN; i++) {
       const m = p.matches[i];
-      cells.push(m ? q(m.name) : "", m ? q(m.pos) : "", m ? m.score : "");
+      cells.push(m ? q(m.name) : "", m ? q(m.pos) : "", m ? m.gapPts : "", m ? q(m.grade.label) : "", m ? q(m.gaps.join("; ")) : "");
     }
+    for (const s of statCols) cells.push(Math.round(p.k2[s]));
     csv += cells.join(",") + "\n";
   }
   const a = document.createElement("a");
-  const url = URL.createObjectURL(new Blob([csv], {type: "text/csv"}));
-  a.href = url;
-  a.download = "archetypes.csv";
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+  a.href = url; a.download = "archetypes.csv";
   document.body.appendChild(a);
   a.click();
-  // Revoking synchronously races the download start in Firefox/Safari.
   setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 0);
 });
+
+// Restore the previous run (the whole roster, not just one player).
+(function restoreBatch() {
+  try {
+    const saved = JSON.parse(store.get(LS_BATCH_KEY) || "null");
+    if (saved && saved.players && saved.players.length) {
+      lastBatchRows = { players: saved.players, skips: saved.skips || [], dupes: [] };
+      leagueAnchors = E.deriveAnchors(saved.players.map(p => p.bbgm));
+      const opt = calibSel.querySelector('option[value="league"]');
+      opt.disabled = !leagueAnchors;
+      if (leagueAnchors) opt.textContent = `This league (${saved.players.length} players)`;
+      document.getElementById("batchSummary").innerHTML =
+        `<button class="secondary" id="btnRestore" style="margin:0">Restore previous run (${saved.players.length} players)</button>`;
+      document.getElementById("btnRestore").addEventListener("click", recomputeBatch);
+    }
+  } catch { /* ignore malformed storage */ }
+})();
+
+// ---------- Archetype browser ----------
+(function archetypeBrowser() {
+  const posSelEl = document.getElementById("abPos");
+  const positions = [...new Set(E.ARCHETYPES.map(a => a.pos))].sort();
+  posSelEl.innerHTML = `<option value="">All</option>` + positions.map(p => `<option>${esc(p)}</option>`).join("");
+  const tpIdx = E.STAT_NAMES.indexOf("Threepoint Shot");
+  function render() {
+    const q = document.getElementById("abSearch").value.trim().toLowerCase();
+    const pos = posSelEl.value;
+    const hMax = parseFloat(document.getElementById("abHMax").value);
+    const tpMax = parseFloat(document.getElementById("abTPMax").value);
+    let list = E.ARCHETYPES.map((a, i) => ({ a, i }));
+    if (q) list = list.filter(x => x.a.name.toLowerCase().includes(q));
+    if (pos) list = list.filter(x => x.a.pos === pos);
+    if (!isNaN(hMax)) list = list.filter(x => x.a.hMin <= hMax);
+    if (!isNaN(tpMax)) list = list.filter(x => x.a.stats[tpIdx][0] <= tpMax);
+    const out = document.getElementById("abOut");
+    let html = `<div class="hint" style="margin-top:.5rem">${list.length} of ${E.ARCHETYPES.length} builds match.</div>`;
+    html += `<div class="sticky-table" style="margin-top:.5rem"><table><thead><tr><th>Build</th><th>Pos</th><th>Height</th><th>3PT min</th><th>Equivalent BBGM player</th></tr></thead><tbody>`;
+    for (const { a, i } of list.slice(0, 300)) {
+      const b = E.archetypeToBBGM(i);
+      const bbgmStr = ["Hgt","Stre","Spd","Ins","Dnk","Mid","TP","DIQ","Drb","Pss","Reb"].map(s => `${s} ${b[s]}`).join(" · ");
+      html += `<tr><td>${esc(a.name)}</td><td>${esc(a.pos)}</td><td>${esc(E.fmtHeight(a.hMin, a.hMax))}</td>` +
+        `<td>${a.stats[tpIdx][0]}</td><td class="hint" style="white-space:normal">${esc(bbgmStr)}</td></tr>`;
+    }
+    html += `</tbody></table></div>`;
+    if (list.length > 300) html += `<div class="hint">Showing the first 300 — narrow the filters to see the rest.</div>`;
+    out.innerHTML = html;
+  }
+  ["abSearch", "abPos", "abHMax", "abTPMax"].forEach(id => document.getElementById(id).addEventListener("input", render));
+  render();
+})();
 </script>
 </body>
 </html>
