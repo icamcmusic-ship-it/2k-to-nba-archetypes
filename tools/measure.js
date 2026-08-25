@@ -63,6 +63,39 @@ for(const [a,b] of buckets){const sub=res.filter(r=>r.p.TP>=a&&r.p.TP<=b);
   if(!sub.length)continue;
   const m=sub.reduce((s,r)=>s+E.ARCHETYPES[r.r.matches[0].ai].stats[si["Threepoint Shot"]][0],0)/sub.length;
   console.log(`3Pt ${a}-${b}: n=${sub.length} mean assigned 3PT min ${m.toFixed(1)}`);}
+// key-attribute discipline: how far short of a build's *defining* stats the
+// assigned build leaves the player, and how many builds each player legitimately
+// qualifies for at all
+const keyGaps = res.map(r => r.r.matches[0].keyGap).sort((a, b) => a - b);
+const over = n => (100 * keyGaps.filter(g => g > n).length / keyGaps.length).toFixed(0);
+console.log(`key shortfall on assigned build: >10 ${over(10)}% >25 ${over(25)}% mean ${(keyGaps.reduce((a, b) => a + b, 0) / keyGaps.length).toFixed(1)}`);
+const buildable = res.filter(r => r.r.buildable);
+console.log(`buildable ${buildable.length}/${res.length} (${(100 * buildable.length / res.length).toFixed(0)}%); ` +
+  `key-violating among them: ${buildable.filter(r => r.r.matches[0].keyGap > E.CONSTANTS.KEY_GAP).length}`);
+const qual = res.map(r => r.r.qualifying).sort((a, b) => a - b);
+const qat = q => qual[Math.floor(q / 100 * (qual.length - 1))];
+console.log(`qualifying builds per player: p25=${qat(25)} p50=${qat(50)} p75=${qat(75)} p90=${qat(90)}`);
+const worst = {};
+for (const r of res) for (const k of r.r.matches[0].keyShort) { const st = k.split(" (")[0]; worst[st] = (worst[st] || 0) + 1; }
+console.log("most-violated key stats:", Object.entries(worst).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([s, n]) => `${s} ${n}`).join(", "));
+
+// round-trip: a build converted to the BBGM player it describes must match itself
+let rt1 = 0, rt3 = 0, rt5 = 0, rtN = 0;
+for (let i = 0; i < E.ARCHETYPES.length; i += 13) {
+  const m = E.matchArchetypes(E.convertPlayer(E.archetypeToBBGM(i)), 5).matches;
+  rtN++;
+  if (m[0].ai === i) rt1++;
+  if (m.slice(0, 3).some(x => x.ai === i)) rt3++;
+  if (m.some(x => x.ai === i)) rt5++;
+}
+console.log(`round-trip self-recovery: top1 ${(100*rt1/rtN).toFixed(0)}% top3 ${(100*rt3/rtN).toFixed(0)}% top5 ${(100*rt5/rtN).toFixed(0)}% (n=${rtN})`);
+
+if (opts.anchors) {
+  const adj = E.anchorAdjustments(opts.anchors);
+  console.log(`derived anchors: divergence from NBA ${E.anchorDivergence(opts.anchors).toFixed(1)} rating pts; ` +
+    `forced apart: ${Object.keys(adj).length ? Object.entries(adj).map(([s, n]) => `${s}x${n}`).join(", ") : "none"}`);
+}
+
 // legend reachability
 const god = Object.fromEntries(E.BBGM_STATS.map(s=>[s,100]));
 const gb = E.calcBadges(E.convertPlayer(god));

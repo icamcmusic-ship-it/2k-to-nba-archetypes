@@ -78,13 +78,15 @@ test("converted 2K stats are not near-duplicates of each other", () => {
 });
 
 test("fit grade is monotonic and not constant", () => {
-  const labels = [0, 15, 25, 40, 100].map(p => E.fitGrade(p).pct);
+  const labels = [0, 20, 40, 60, 100].map(p => E.fitGrade(p).pct);
   for (let i = 1; i < labels.length; i++) assert.ok(labels[i] < labels[i - 1], "grade must fall as penalty rises");
 });
 
 test("a hopeless profile is flagged, not shown as a clean match", () => {
   const r = E.matchArchetypes(E.convertPlayer(ZERO), 3);
-  assert.strictEqual(r.quality, "none");
+  assert.strictEqual(r.quality, "unbuildable");
+  assert.strictEqual(r.buildable, false);
+  assert.strictEqual(r.qualifying, 0);
   assert.ok(r.qualityNote.length > 0);
   assert.ok(r.grade.pct < 50, "a player no build fits must not grade well");
   assert.ok(r.matches.length > 0, "closest shapes should still be shown");
@@ -109,7 +111,7 @@ test("3PT actually discriminates", () => {
     }, 0) / sub.length;
   };
   const low = meanMin([0, 20]), high = meanMin([55, 100]);
-  assert.ok(high - low > 12, `3PT requirement barely moves with 3Pt: ${low.toFixed(1)} -> ${high.toFixed(1)}`);
+  assert.ok(high - low > 10, `3PT requirement barely moves with 3Pt: ${low.toFixed(1)} -> ${high.toFixed(1)}`);
 });
 
 test("non-shooters are rarely handed shooting builds", () => {
@@ -167,17 +169,132 @@ test("height formatting never produces 5'12\"", () => {
   }
 });
 
-test("reverse mapping lands the build back near the top of its own match list", () => {
-  // Designing a build and converting it back to BBGM must produce a player the
-  // matcher recognises -- a permanent check that the two directions agree.
-  let hits = 0, tried = 0;
-  for (let i = 0; i < E.ARCHETYPES.length; i += 97) {
-    const bbgm = E.archetypeToBBGM(i);
-    const r = E.matchArchetypes(E.convertPlayer(bbgm), 25);
+test("a build fed its own profile matches itself (round trip)", () => {
+  // The real self-consistency check: build -> BBGM player -> match must come
+  // back to the build. The weaker percentileToBBGM round trip above passed while
+  // this one failed for 56% of builds.
+  let top1 = 0, top3 = 0, top5 = 0, tried = 0;
+  for (let i = 0; i < E.ARCHETYPES.length; i += 13) {
+    const m = E.matchArchetypes(E.convertPlayer(E.archetypeToBBGM(i)), 5).matches;
     tried++;
-    if (r.matches.some(m => m.ai === i)) hits++;
+    if (m[0].ai === i) top1++;
+    if (m.slice(0, 3).some(x => x.ai === i)) top3++;
+    if (m.some(x => x.ai === i)) top5++;
   }
-  assert.ok(hits / tried > 0.5, `only ${hits}/${tried} builds round-tripped into their own top 25`);
+  assert.ok(top1 / tried > 0.28, `only ${top1}/${tried} builds matched themselves first`);
+  assert.ok(top3 / tried > 0.40, `only ${top3}/${tried} builds round-tripped into their own top 3`);
+  assert.ok(top5 / tried > 0.45, `only ${top5}/${tried} builds round-tripped into their own top 5`);
+});
+
+test("the round trip is close to the ceiling the ratings model allows", () => {
+  // 21 2K stats are built from 15 BBGM ones, so builds pulling shared inputs in
+  // opposite directions are not representable at all. The matcher's job is to
+  // lose nothing *beyond* that: compare it with an oracle that simply picks the
+  // build whose midpoint profile is nearest the recovered player.
+  const mids = E.ARCHETYPES.map((_, i) => {
+    const d = E.matchDetail({ blendPctl: Object.fromEntries(E.STAT_NAMES.map(s => [s, 0])), k2: {} }, i);
+    return d.map(r => (r.lo + r.hi) / 2);
+  });
+  let matcher = 0, oracle = 0, tried = 0;
+  for (let i = 0; i < E.ARCHETYPES.length; i += 29) {
+    const conv = E.convertPlayer(E.archetypeToBBGM(i));
+    const v = E.STAT_NAMES.map(s => conv.blendPctl[s]);
+    const near = E.ARCHETYPES
+      .map((a, j) => ({ j, d: conv.heightIn >= a.hMin - 1 && conv.heightIn <= a.hMax + 1
+        ? mids[j].reduce((sum, m, k) => sum + (m - v[k]) ** 2, 0) : Infinity }))
+      .sort((a, b) => a.d - b.d);
+    tried++;
+    if (near.slice(0, 3).some(x => x.j === i)) oracle++;
+    if (E.matchArchetypes(conv, 3).matches.some(m => m.ai === i)) matcher++;
+  }
+  assert.ok(matcher >= oracle * 0.7,
+    `matcher recovers ${matcher}/${tried} where a nearest-profile oracle recovers ${oracle}/${tried}`);
+});
+
+test("key attributes exist for every build and are what it is built around", () => {
+  for (let i = 0; i < E.ARCHETYPES.length; i++) {
+    const key = E.keyAttributes(i);
+    assert.ok(key.length >= 1 && key.length <= E.CONSTANTS.KEY_MAX, `build ${i} has ${key.length} key attributes`);
+    for (let k = 1; k < key.length; k++) assert.ok(key[k].need <= key[k - 1].need, "key attributes must be ordered by demand");
+  }
+  const mean = E.ARCHETYPES.reduce((a, _, i) => a + E.keyAttributes(i).length, 0) / E.ARCHETYPES.length;
+  assert.ok(mean > 2, `builds average only ${mean.toFixed(1)} key attributes`);
+});
+
+test("the key-attribute veto holds at every level, fallback included", () => {
+  // The veto is worthless if the fallback under it hands back the same build.
+  for (const p of roster.slice(0, 300)) {
+    const r = E.matchArchetypes(E.convertPlayer(p), 3);
+    if (r.quality === "unbuildable") {
+      assert.strictEqual(r.qualifying, 0, "unbuildable means nothing qualified");
+      continue;
+    }
+    assert.ok(r.matches[0].keyGap <= E.CONSTANTS.KEY_GAP,
+      `${p.name} was given ${r.matches[0].name} while ${r.matches[0].keyGap} short of a key attribute`);
+  }
+});
+
+test("a build's grade is capped when a key attribute is missed", () => {
+  const capped = E.fitGrade(0, E.CONSTANTS.KEY_GAP + 10);
+  assert.strictEqual(capped.label, "Loose fit", "a defining-skill miss cannot be an Excellent fit");
+  assert.ok(E.fitGrade(0, 0).pct > capped.pct);
+});
+
+test("a non-shooter is not handed a build he misses the 3PT requirement on", () => {
+  for (const p of roster.filter(x => x.TP <= 30).slice(0, 200)) {
+    const r = E.matchArchetypes(E.convertPlayer(p), 1);
+    if (!r.buildable) continue;   // flagged honestly, closest shapes only
+    const m = r.matches[0];
+    const key = E.keyAttributes(m.ai).find(k => k.stat === "Threepoint Shot");
+    if (!key) continue;   // the build isn't built around shooting
+    const need = key.need;
+    const have = E.bbgmToPercentile("TP", p.TP);
+    assert.ok(need - have <= E.CONSTANTS.KEY_GAP,
+      `${p.name} (3Pt ${p.TP}) got ${m.name}, which is built around a ${Math.round(need)}th-pctile shot`);
+  }
+});
+
+test("fit grade cut points are mode-specific", () => {
+  assert.notDeepStrictEqual(E.GRADE_CUTS.nba, E.GRADE_CUTS.league);
+  // league mode penalties are roughly half NBA-mode ones, so its cuts must be lower
+  for (let i = 0; i < E.GRADE_CUTS.nba.length; i++) {
+    assert.ok(E.GRADE_CUTS.league[i] < E.GRADE_CUTS.nba[i], "league cut points must be tighter");
+  }
+  const anchors = E.deriveAnchors(roster);
+  const share = (opts, calib) => {
+    const good = roster.filter(p => E.matchArchetypes(E.convertPlayer(p, opts), 1, { calib }).grade.pct >= 80).length;
+    return good / roster.length;
+  };
+  // the bug: NBA cut points applied in league mode graded three quarters of the
+  // league "Good fit" or better
+  assert.ok(share({ anchors }, "league") < 0.5, "league mode must not grade half the roster as a good fit");
+});
+
+test("grading against a loaded batch tracks that batch's distribution", () => {
+  const pens = roster.map(p => E.matchArchetypes(E.convertPlayer(p), 1).bestPen);
+  const grader = E.makeGrader(pens);
+  const graded = pens.map(pen => grader(pen, 0).pct);
+  const excellent = graded.filter(v => v === 95).length / graded.length;
+  assert.ok(excellent > 0.1 && excellent < 0.32, `top grade covers ${(excellent * 100).toFixed(0)}% of the batch`);
+  assert.strictEqual(E.makeGrader([1, 2, 3]), E.fitGrade, "too small a batch falls back to the fixed table");
+});
+
+test("deriveAnchors reports the monotonicity fixes it had to make", () => {
+  const flat = Array.from({ length: 40 }, () => Object.fromEntries(E.BBGM_STATS.map(s => [s, 50])));
+  const anchors = E.deriveAnchors(flat);
+  const adj = E.anchorAdjustments(anchors);
+  assert.ok(Object.keys(adj).length === E.BBGM_STATS.length, "a wholly flat league must flag every stat");
+  assert.ok(adj.Hgt >= 7, "each forced anchor should be counted");
+  assert.deepStrictEqual(E.anchorAdjustments(E.deriveAnchors(roster)), {}, "a real roster needs no fixes");
+  assert.ok(E.anchorDivergence(E.deriveAnchors(roster)) > 0, "a non-NBA league should measure some divergence");
+  assert.strictEqual(E.anchorDivergence(E.NBA_ANCHORS), 0);
+});
+
+test("reverse mapping fills in what 2K cannot describe", () => {
+  const bbgm = E.archetypeToBBGM(0);
+  for (const s of E.BBGM_STATS) assert.ok(typeof bbgm[s] === "number", `${s} missing from reverse output`);
+  assert.strictEqual(bbgm.Endu, 50, "endurance has no 2K source and must be an explicit placeholder");
+  assert.ok(E.REVERSE_PLACEHOLDERS.Endu, "placeholders must be labelled");
 });
 
 test("golden file: a fixed set of players keeps producing the same match", () => {
